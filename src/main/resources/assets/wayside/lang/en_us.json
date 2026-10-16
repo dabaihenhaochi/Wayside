@@ -1,0 +1,13 @@
+{
+  "itemGroup.wayside": "Wayside",
+  "block.wayside.example_block": "Example Block",
+  "item.wayside.example_item": "Example Item",
+
+  "wayside.configuration.title": "Wayside Configs",
+  "wayside.configuration.section.wayside.common.toml": "Wayside Configs",
+  "wayside.configuration.section.wayside.common.toml.title": "Wayside Configs",
+  "wayside.configuration.items": "Item List",
+  "wayside.configuration.logDirtBlock": "Log Dirt Block",
+  "wayside.configuration.magicNumberIntroduction": "Magic Number Text",
+  "wayside.configuration.magicNumber": "Magic Number"
+}
