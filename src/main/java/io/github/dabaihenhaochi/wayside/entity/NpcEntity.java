@@ -1,12 +1,20 @@
 package io.github.dabaihenhaochi.wayside.entity;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcMoveToTargetGoal;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 
 public class NpcEntity extends PathfinderMob {
+    private BlockPos moveTarget;
 
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -17,5 +25,49 @@ public class NpcEntity extends PathfinderMob {
                 .add(Attributes.MAX_HEALTH, 20.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.25)
                 .add(Attributes.FOLLOW_RANGE, 32.0);
+    }
+
+    @Override
+    protected void registerGoals() {
+
+        this.goalSelector.addGoal(
+                1,
+                new NpcMoveToTargetGoal(this, 1.0)
+        );
+
+        this.goalSelector.addGoal(
+                2,
+                new LookAtPlayerGoal(this, Player.class, 8.0F)
+        );
+
+        this.goalSelector.addGoal(
+                3,
+                new RandomLookAroundGoal(this)
+        );
+    }
+
+    @Override
+    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (!this.level().isClientSide) {
+            this.setMoveTarget(player.blockPosition());
+        }
+
+        return InteractionResult.sidedSuccess(this.level().isClientSide);
+    }
+
+    public void setMoveTarget(BlockPos moveTarget) {
+        this.moveTarget = moveTarget;
+    }
+
+    public BlockPos getMoveTarget() {
+        return this.moveTarget;
+    }
+
+    public boolean hasMoveTarget() {
+        return this.moveTarget != null;
+    }
+
+    public void clearMoveTarget() {
+        this.moveTarget = null;
     }
 }
