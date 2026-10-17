@@ -82,6 +82,14 @@ public class NpcMoveToTargetGoal extends Goal {
         // 整个任务持续太久，真正放弃目标
         if (elapsedTicks >= MAX_TARGET_TICKS) {
             this.npc.getNavigation().stop();
+
+            BlockPos blockTarget = this.npc.getBlockTarget();
+
+            if (blockTarget != null && blockTarget.equals(target)) {
+                this.npc.markBlockTargetFailed(blockTarget);
+                this.npc.clearBlockTarget();
+            }
+
             this.npc.clearMoveTarget();
             return;
         }

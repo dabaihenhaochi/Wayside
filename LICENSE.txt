@@ -1,0 +1,11 @@
+Wayside — All Rights Reserved
+
+Copyright (c) 2026 dabaihenhaochi. All rights reserved.
+
+This notice applies to the original code, assets, and documentation of Wayside, except where otherwise stated.
+
+Except as permitted by applicable law or the GitHub Terms of Service, modifying, redistributing, publishing modified versions of, or commercially using these original materials requires prior written permission from the copyright holder.
+
+Making the source code publicly available does not grant additional permissions. Rights granted under the GitHub Terms of Service, including viewing and forking the public repository through GitHub, remain unaffected.
+
+Third-party materials remain subject to their respective licenses and copyright notices. In particular, the NeoForged MDK template files remain subject to TEMPLATE_LICENSE.txt.

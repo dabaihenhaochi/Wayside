@@ -12,9 +12,17 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcFindBlockGoal;
+import net.minecraft.tags.BlockTags;
+import java.util.Map;
+import java.util.HashMap;
 
 public class NpcEntity extends PathfinderMob {
     private BlockPos moveTarget;
+    private BlockPos blockTarget;
+
+    private static final long FAILED_TARGET_COOLDOWN_TICKS = 1200L;
+    private final Map<BlockPos, Long> failedBlockTargets = new HashMap<>();
 
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -37,11 +45,19 @@ public class NpcEntity extends PathfinderMob {
 
         this.goalSelector.addGoal(
                 2,
-                new LookAtPlayerGoal(this, Player.class, 8.0F)
+                new NpcFindBlockGoal(
+                        this,
+                        state -> state.is(BlockTags.LOGS)
+                )
         );
 
         this.goalSelector.addGoal(
                 3,
+                new LookAtPlayerGoal(this, Player.class, 8.0F)
+        );
+
+        this.goalSelector.addGoal(
+                4,
                 new RandomLookAroundGoal(this)
         );
     }
@@ -49,6 +65,7 @@ public class NpcEntity extends PathfinderMob {
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide) {
+            this.clearBlockTarget();
             this.setMoveTarget(player.blockPosition());
         }
 
@@ -69,5 +86,49 @@ public class NpcEntity extends PathfinderMob {
 
     public void clearMoveTarget() {
         this.moveTarget = null;
+    }
+
+    public void setBlockTarget(BlockPos blockTarget) {
+        this.blockTarget = blockTarget;
+    }
+
+    public BlockPos getBlockTarget() {
+        return this.blockTarget;
+    }
+
+    public boolean hasBlockTarget() {
+        return this.blockTarget != null;
+    }
+
+    public void clearBlockTarget() {
+        this.blockTarget = null;
+    }
+
+    public void markBlockTargetFailed(BlockPos pos) {
+        long now = this.level().getGameTime();
+
+        failedBlockTargets.entrySet().removeIf(
+                entry -> entry.getValue() <= now
+        );
+
+        failedBlockTargets.put(
+                pos.immutable(),
+                now + FAILED_TARGET_COOLDOWN_TICKS
+        );
+    }
+
+    public boolean isBlockTargetOnCooldown(BlockPos pos) {
+        Long retryTime = failedBlockTargets.get(pos);
+
+        if (retryTime == null) {
+            return false;
+        }
+
+        if (this.level().getGameTime() >= retryTime) {
+            failedBlockTargets.remove(pos);
+            return false;
+        }
+
+        return true;
     }
 }
