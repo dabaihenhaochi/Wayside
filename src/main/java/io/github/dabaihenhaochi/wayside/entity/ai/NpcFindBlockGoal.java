@@ -32,20 +32,21 @@ public class NpcFindBlockGoal extends Goal {
         BlockPos target = npc.getBlockTarget();
 
         if (target != null) {
-            // 原目标仍然有效，不允许重新搜索
-            if (targetPredicate.test(npc.level().getBlockState(target))) {
-                return false;
+            // 保留有效资源；被推离后等落地，再为同一资源重新选择站位。
+            if (npc.level().hasChunkAt(target)
+                    && targetPredicate.test(npc.level().getBlockState(target))) {
+                return npc.onGround()
+                        && !npc.hasMoveTarget()
+                        && !npc.canReachBlock(target)
+                        && npc.level().getGameTime() >= nextScanTime;
             }
 
             // 原目标已失效，清理状态
             npc.clearBlockTarget();
-
-            if (target.equals(npc.getMoveTarget())) {
-                npc.clearMoveTarget();
-            }
         }
 
-        return !npc.hasMoveTarget()
+        return npc.onGround()
+                && !npc.hasMoveTarget()
                 && npc.level().getGameTime() >= nextScanTime;
     }
 
@@ -53,11 +54,13 @@ public class NpcFindBlockGoal extends Goal {
     public void start() {
         this.nextScanTime =
                 this.npc.level().getGameTime() + SCAN_INTERVAL_TICKS;
-        Optional<BlockPos> target = BlockPos.findClosestMatch(
+        Optional<BlockPos> target = npc.hasBlockTarget()
+                ? Optional.of(npc.getBlockTarget())
+                : BlockPos.findClosestMatch(
                 npc.blockPosition(),
                 HORIZONTAL_SCAN_RANGE,
                 VERTICAL_SCAN_RANGE,
-                pos -> targetPredicate.test(
+                pos -> npc.level().hasChunkAt(pos) && targetPredicate.test(
                         npc.level().getBlockState(pos)
                 ) && !npc.isBlockTargetOnCooldown(pos)
         );
@@ -66,7 +69,10 @@ public class NpcFindBlockGoal extends Goal {
             BlockPos targetPos = target.get().immutable();
 
             npc.setBlockTarget(targetPos);
-            npc.setMoveTarget(targetPos);
+            if (!npc.planMoveToBlockTarget()) {
+                npc.markBlockTargetFailed(targetPos);
+                npc.clearBlockTarget();
+            }
         }
     }
 

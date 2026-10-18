@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ai.goal.Goal;
 
 import java.util.EnumSet;
+import java.util.Objects;
 
 public class NpcMoveToTargetGoal extends Goal {
 
@@ -15,8 +16,9 @@ public class NpcMoveToTargetGoal extends Goal {
     private final double speedModifier;
 
     private BlockPos activeTarget;
+    private BlockPos activeBlockTarget;
 
-    private int retryCooldown;
+    private long nextRetryTime;
     private long targetStartTime;
 
     public NpcMoveToTargetGoal(NpcEntity npc, double speedModifier) {
@@ -45,8 +47,9 @@ public class NpcMoveToTargetGoal extends Goal {
         }
 
         this.activeTarget = target;
+        this.activeBlockTarget = this.npc.getBlockTarget();
         this.targetStartTime = this.npc.level().getGameTime();
-        this.retryCooldown = 0;
+        this.nextRetryTime = 0L;
 
         this.tryMoveTo(target);
     }
@@ -60,10 +63,16 @@ public class NpcMoveToTargetGoal extends Goal {
         }
 
         // 上层改变了目标，例如玩家重新右键 NPC
-        if (!target.equals(this.activeTarget)) {
+        if (!target.equals(this.activeTarget)
+                || !Objects.equals(this.activeBlockTarget, this.npc.getBlockTarget())) {
+            BlockPos blockTarget = this.npc.getBlockTarget();
+            // 同一块原木换站位不重置总超时，避免无法抵达时无限重新规划。
+            if (blockTarget == null || !blockTarget.equals(this.activeBlockTarget)) {
+                this.targetStartTime = this.npc.level().getGameTime();
+            }
             this.activeTarget = target;
-            this.targetStartTime = this.npc.level().getGameTime();
-            this.retryCooldown = 0;
+            this.activeBlockTarget = blockTarget;
+            this.nextRetryTime = 0L;
 
             this.tryMoveTo(target);
             return;
@@ -85,7 +94,7 @@ public class NpcMoveToTargetGoal extends Goal {
 
             BlockPos blockTarget = this.npc.getBlockTarget();
 
-            if (blockTarget != null && blockTarget.equals(target)) {
+            if (blockTarget != null) {
                 this.npc.markBlockTargetFailed(blockTarget);
                 this.npc.clearBlockTarget();
             }
@@ -98,9 +107,27 @@ public class NpcMoveToTargetGoal extends Goal {
         // 说明当前这一次寻路失败或结束了
         if (this.npc.getNavigation().isDone()) {
 
-            if (this.retryCooldown > 0) {
-                this.retryCooldown--;
+            if (this.npc.level().getGameTime() < this.nextRetryTime) {
                 return;
+            }
+
+            // 资源坐标和站位坐标不同，失败重试时重新检查站位及可达路径。
+            if (this.npc.hasBlockTarget()) {
+                if (!this.npc.onGround()) {
+                    return;
+                }
+                if (!this.npc.planMoveToBlockTarget()) {
+                    this.npc.markBlockTargetFailed(this.npc.getBlockTarget());
+                    this.npc.clearBlockTarget();
+                    this.npc.getNavigation().stop();
+                    return;
+                }
+                target = this.npc.getMoveTarget();
+                if (target == null) {
+                    this.npc.getNavigation().stop();
+                    return;
+                }
+                this.activeTarget = target;
             }
 
             this.tryMoveTo(target);
@@ -112,7 +139,8 @@ public class NpcMoveToTargetGoal extends Goal {
         this.npc.getNavigation().stop();
 
         this.activeTarget = null;
-        this.retryCooldown = 0;
+        this.activeBlockTarget = null;
+        this.nextRetryTime = 0L;
     }
 
     private void tryMoveTo(BlockPos target) {
@@ -124,13 +152,18 @@ public class NpcMoveToTargetGoal extends Goal {
                 target.getX() + 0.5,
                 target.getY(),
                 target.getZ() + 0.5,
+                this.npc.hasBlockTarget() ? 0 : 1,
                 this.speedModifier
         );
 
-        this.retryCooldown = RETRY_INTERVAL_TICKS;
+        this.nextRetryTime = this.npc.level().getGameTime() + RETRY_INTERVAL_TICKS;
     }
 
     private boolean hasReachedTarget(BlockPos target) {
+        if (this.npc.hasBlockTarget()) {
+            return this.npc.canReachBlock(this.npc.getBlockTarget());
+        }
+
         double targetX = target.getX() + 0.5;
         double targetY = target.getY();
         double targetZ = target.getZ() + 0.5;

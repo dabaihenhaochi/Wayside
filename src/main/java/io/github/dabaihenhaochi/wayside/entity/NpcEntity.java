@@ -13,9 +13,12 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcFindBlockGoal;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcHarvestBlockGoal;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import net.minecraft.tags.BlockTags;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Optional;
 
 public class NpcEntity extends PathfinderMob {
     private BlockPos moveTarget;
@@ -37,6 +40,11 @@ public class NpcEntity extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
+
+        this.goalSelector.addGoal(
+                0,
+                new NpcHarvestBlockGoal(this)
+        );
 
         this.goalSelector.addGoal(
                 1,
@@ -73,7 +81,9 @@ public class NpcEntity extends PathfinderMob {
     }
 
     public void setMoveTarget(BlockPos moveTarget) {
-        this.moveTarget = moveTarget;
+        // 外部移动命令取代采集任务；自动站位由 planMoveToBlockTarget 单独设置。
+        this.clearBlockTarget();
+        this.moveTarget = moveTarget.immutable();
     }
 
     public BlockPos getMoveTarget() {
@@ -89,7 +99,8 @@ public class NpcEntity extends PathfinderMob {
     }
 
     public void setBlockTarget(BlockPos blockTarget) {
-        this.blockTarget = blockTarget;
+        this.clearBlockTarget();
+        this.blockTarget = blockTarget.immutable();
     }
 
     public BlockPos getBlockTarget() {
@@ -101,7 +112,34 @@ public class NpcEntity extends PathfinderMob {
     }
 
     public void clearBlockTarget() {
+        if (this.blockTarget != null) {
+            this.clearMoveTarget();
+        }
         this.blockTarget = null;
+    }
+
+    // 移动和采集共用操作距离、遮挡和落脚处检查。
+    public boolean canReachBlock(BlockPos target) {
+        return NpcBlockInteraction.canWorkAt(this, target, this.position());
+    }
+
+    public boolean planMoveToBlockTarget() {
+        if (this.blockTarget == null) {
+            return false;
+        }
+
+        if (this.canReachBlock(this.blockTarget)) {
+            this.clearMoveTarget();
+            return true;
+        }
+
+        Optional<BlockPos> workPosition = NpcBlockInteraction.findWorkPosition(this, this.blockTarget);
+        if (workPosition.isEmpty()) {
+            return false;
+        }
+
+        this.moveTarget = workPosition.get();
+        return true;
     }
 
     public void markBlockTargetFailed(BlockPos pos) {
