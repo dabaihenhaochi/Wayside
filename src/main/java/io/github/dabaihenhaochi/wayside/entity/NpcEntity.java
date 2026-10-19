@@ -19,6 +19,16 @@ import net.minecraft.tags.BlockTags;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Optional;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.item.ItemEntity;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcCollectItemGoal;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.ContainerHelper;
 
 public class NpcEntity extends PathfinderMob {
     private BlockPos moveTarget;
@@ -26,6 +36,9 @@ public class NpcEntity extends PathfinderMob {
 
     private static final long FAILED_TARGET_COOLDOWN_TICKS = 1200L;
     private final Map<BlockPos, Long> failedBlockTargets = new HashMap<>();
+
+    private final SimpleContainer inventory = new SimpleContainer(9);
+    private static final int TARGET_LOG_COUNT = 16;
 
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -53,6 +66,11 @@ public class NpcEntity extends PathfinderMob {
 
         this.goalSelector.addGoal(
                 2,
+                new NpcCollectItemGoal(this)
+        );
+
+        this.goalSelector.addGoal(
+                3,
                 new NpcFindBlockGoal(
                         this,
                         state -> state.is(BlockTags.LOGS)
@@ -60,12 +78,12 @@ public class NpcEntity extends PathfinderMob {
         );
 
         this.goalSelector.addGoal(
-                3,
+                4,
                 new LookAtPlayerGoal(this, Player.class, 8.0F)
         );
 
         this.goalSelector.addGoal(
-                4,
+                5,
                 new RandomLookAroundGoal(this)
         );
     }
@@ -75,6 +93,11 @@ public class NpcEntity extends PathfinderMob {
         if (!this.level().isClientSide) {
             this.clearBlockTarget();
             this.setMoveTarget(player.blockPosition());
+
+            player.sendSystemMessage(Component.literal(
+                    "原木数量：" + this.getLogCount()
+                            + " / " + TARGET_LOG_COUNT
+            ));
         }
 
         return InteractionResult.sidedSuccess(this.level().isClientSide);
@@ -168,5 +191,88 @@ public class NpcEntity extends PathfinderMob {
         }
 
         return true;
+    }
+
+    public SimpleContainer getInventory() {
+        return this.inventory;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+
+        if (this.level().isClientSide || this.tickCount % 10 != 0) {
+            return;
+        }
+
+        for (ItemEntity item : this.level().getEntitiesOfClass(
+                ItemEntity.class,
+                this.getBoundingBox().inflate(0.5)
+        )) {
+            if (item.hasPickUpDelay() || !this.wantsItem(item.getItem())) {
+                continue;
+            }
+
+            ItemStack stack = item.getItem();
+            ItemStack remaining = this.inventory.addItem(stack.copy());
+
+            if (remaining.isEmpty()) {
+                item.discard();
+            } else {
+                item.setItem(remaining);
+            }
+        }
+    }
+
+    public int getLogCount() {
+        int count = 0;
+
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+
+            if (stack.is(ItemTags.LOGS)) {
+                count += stack.getCount();
+            }
+        }
+
+        return count;
+    }
+
+    public boolean needsLogs() {
+        return getLogCount() < TARGET_LOG_COUNT;
+    }
+
+    public boolean wantsItem(ItemStack stack) {
+        return stack.is(ItemTags.LOGS) && this.needsLogs();
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+
+        CompoundTag inventoryTag = new CompoundTag();
+
+        ContainerHelper.saveAllItems(
+                inventoryTag,
+                this.inventory.getItems(),
+                this.level().registryAccess()
+        );
+
+        tag.put("WaysideInventory", inventoryTag);
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+
+        this.inventory.clearContent();
+
+        if (tag.contains("WaysideInventory", Tag.TAG_COMPOUND)) {
+            ContainerHelper.loadAllItems(
+                    tag.getCompound("WaysideInventory"),
+                    this.inventory.getItems(),
+                    this.level().registryAccess()
+            );
+        }
     }
 }

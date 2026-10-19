@@ -7,6 +7,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.EnumSet;
 
 public class NpcFindBlockGoal extends Goal {
 
@@ -25,10 +26,15 @@ public class NpcFindBlockGoal extends Goal {
     ) {
         this.npc = npc;
         this.targetPredicate = targetPredicate;
+        this.setFlags(EnumSet.of(Flag.MOVE));
     }
 
     @Override
     public boolean canUse() {
+        if (!npc.needsLogs()) {
+            return false;
+        }
+
         BlockPos target = npc.getBlockTarget();
 
         if (target != null) {
