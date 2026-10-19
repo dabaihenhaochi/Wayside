@@ -29,6 +29,7 @@ import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcCraftPlanksGoal;
 
 public class NpcEntity extends PathfinderMob {
     private BlockPos moveTarget;
@@ -39,6 +40,14 @@ public class NpcEntity extends PathfinderMob {
 
     private final SimpleContainer inventory = new SimpleContainer(9);
     private static final int TARGET_LOG_COUNT = 16;
+
+    public enum TaskStage {
+        COLLECTING,
+        CRAFTING,
+        COMPLETED
+    }
+
+    private TaskStage taskStage = TaskStage.COLLECTING;
 
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -53,6 +62,11 @@ public class NpcEntity extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
+
+        this.goalSelector.addGoal(
+                0,
+                new NpcCraftPlanksGoal(this)
+        );
 
         this.goalSelector.addGoal(
                 0,
@@ -95,8 +109,9 @@ public class NpcEntity extends PathfinderMob {
             this.setMoveTarget(player.blockPosition());
 
             player.sendSystemMessage(Component.literal(
-                    "原木数量：" + this.getLogCount()
-                            + " / " + TARGET_LOG_COUNT
+                    "任务阶段：" + this.getTaskStage()
+                            + "，原木：" + this.getLogCount()
+                            + "，木板：" + this.getPlankCount()
             ));
         }
 
@@ -222,6 +237,7 @@ public class NpcEntity extends PathfinderMob {
                 item.setItem(remaining);
             }
         }
+        this.updateTaskStage();
     }
 
     public int getLogCount() {
@@ -239,7 +255,8 @@ public class NpcEntity extends PathfinderMob {
     }
 
     public boolean needsLogs() {
-        return getLogCount() < TARGET_LOG_COUNT;
+        return this.taskStage == TaskStage.COLLECTING
+                && this.getLogCount() < TARGET_LOG_COUNT;
     }
 
     public boolean wantsItem(ItemStack stack) {
@@ -249,6 +266,8 @@ public class NpcEntity extends PathfinderMob {
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
+
+        tag.putString("WaysideTaskStage", this.taskStage.name());
 
         CompoundTag inventoryTag = new CompoundTag();
 
@@ -265,6 +284,18 @@ public class NpcEntity extends PathfinderMob {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
 
+        this.taskStage = TaskStage.COLLECTING;
+
+        if (tag.contains("WaysideTaskStage", Tag.TAG_STRING)) {
+            try {
+                this.taskStage = TaskStage.valueOf(
+                        tag.getString("WaysideTaskStage")
+                );
+            } catch (IllegalArgumentException e) {
+                this.taskStage = TaskStage.COLLECTING;
+            }
+        }
+
         this.inventory.clearContent();
 
         if (tag.contains("WaysideInventory", Tag.TAG_COMPOUND)) {
@@ -274,5 +305,38 @@ public class NpcEntity extends PathfinderMob {
                     this.level().registryAccess()
             );
         }
+    }
+
+    public TaskStage getTaskStage() {
+        return this.taskStage;
+    }
+
+    private void updateTaskStage() {
+        if (this.taskStage == TaskStage.COLLECTING
+                && this.getLogCount() >= TARGET_LOG_COUNT) {
+
+            this.taskStage = TaskStage.CRAFTING;
+            this.clearBlockTarget();
+        }
+    }
+
+    public void finishCrafting() {
+        if (this.taskStage == TaskStage.CRAFTING) {
+            this.taskStage = TaskStage.COMPLETED;
+        }
+    }
+
+    public int getPlankCount() {
+        int count = 0;
+
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+
+            if (stack.is(ItemTags.PLANKS)) {
+                count += stack.getCount();
+            }
+        }
+
+        return count;
     }
 }
