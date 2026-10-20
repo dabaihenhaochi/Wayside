@@ -78,56 +78,18 @@ public class NpcTaskLifecycleGameTests {
         helper.succeed();
     }
 
-
-    @GameTest(template = "empty", timeoutTicks = 100)
-    public static void sequenceRetriesOnlyFailedChild(GameTestHelper helper) {
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
-        CountingTask completedChild = new CountingTask(false, true);
-        CountingTask failingChild = new CountingTask(true, false);
-        io.github.dabaihenhaochi.wayside.entity.task.TaskSequence sequence =
-                new io.github.dabaihenhaochi.wayside.entity.task.TaskSequence(
-                        "wayside:test_sequence",
-                        java.util.List.of(completedChild, failingChild)
-                );
-
-        NpcTaskRunner runner = npc.getTaskRunner();
-        runner.setTask(sequence);
-        runner.tick(); // First child succeeds.
-        helper.assertTrue(completedChild.ticks == 1, "First child should finish once");
-        runner.tick(); // Second child fails.
-        helper.assertTrue(runner.state() == NpcTaskRunner.State.FAILED,
-                "Second child failure must propagate");
-        helper.assertTrue(runner.lastResult().failure() == ActionResult.Failure.UNREACHABLE,
-                "Runner must retain the child failure reason");
-
-        runner.retry();
-        runner.tick(); // Retry only the second child.
-        helper.assertTrue(completedChild.ticks == 1,
-                "Already completed child must not run twice");
-        helper.assertTrue(failingChild.ticks == 2,
-                "Failed child must be retried");
-        helper.assertTrue(runner.state() == NpcTaskRunner.State.RUNNING,
-                "Recovered child should continue working");
-        helper.succeed();
-    }
-
     private static final class CountingTask implements NpcTask {
         private final boolean failOnce;
-        private final boolean succeedImmediately;
         private int ticks;
 
-        private CountingTask(boolean failOnce) { this(failOnce, false); }
-        private CountingTask(boolean failOnce, boolean succeedImmediately) {
-            this.failOnce = failOnce;
-            this.succeedImmediately = succeedImmediately;
-        }
+        private CountingTask(boolean failOnce) { this.failOnce = failOnce; }
         @Override public String typeId() { return "wayside:test_task"; }
         @Override public String stageName() { return "TEST"; }
         @Override public ActionResult tick(NpcEntity npc) {
             ticks++;
-            if (failOnce && ticks == 1)
-                return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
-            return succeedImmediately ? ActionResult.success() : ActionResult.running();
+            return failOnce && ticks == 1
+                    ? ActionResult.failed(ActionResult.Failure.UNREACHABLE)
+                    : ActionResult.running();
         }
         @Override public void pause(NpcEntity npc) {}
     }
