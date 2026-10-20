@@ -30,6 +30,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcCraftPlanksGoal;
+import io.github.dabaihenhaochi.wayside.building.BuildingBlueprint;
+import io.github.dabaihenhaochi.wayside.building.BuildingInstance;
+import io.github.dabaihenhaochi.wayside.building.ConstructionPlanner;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Rotation;
+import java.util.UUID;
 
 public class NpcEntity extends PathfinderMob {
     private BlockPos moveTarget;
@@ -113,6 +120,50 @@ public class NpcEntity extends PathfinderMob {
                             + "，原木：" + this.getLogCount()
                             + "，木板：" + this.getPlankCount()
             ));
+
+            if (this.level() instanceof ServerLevel serverLevel) {
+
+                ResourceLocation blueprintId =
+                        ResourceLocation.fromNamespaceAndPath(
+                                "wayside", "test_house"
+                        );
+
+                BuildingBlueprint.load(serverLevel, blueprintId)
+                        .ifPresentOrElse(blueprint -> {
+
+                            BuildingInstance testBuilding = new BuildingInstance(
+                                    UUID.randomUUID(),
+                                    blueprintId,
+                                    player.blockPosition().offset(3, 0, 3),
+                                    Rotation.NONE
+                            );
+
+                            var plan = ConstructionPlanner.createPlan(
+                                    serverLevel,
+                                    blueprint,
+                                    testBuilding,
+                                    ConstructionPlanner.AirPolicy.IGNORE
+                            );
+
+                            player.sendSystemMessage(Component.literal(
+                                    "待施工：" + plan.tasks().size()
+                                            + "，不可读取：" + plan.unavailablePositions()
+                                            + "，未核验方块实体：" + plan.uncheckedBlockEntities()
+                            ));
+
+                            plan.tasks().stream().limit(5).forEach(task ->
+                                    player.sendSystemMessage(Component.literal(
+                                            task.action()
+                                                    + " " + task.pos()
+                                                    + " -> " + task.targetState()
+                                    ))
+                            );
+
+                        }, () -> player.sendSystemMessage(
+                                Component.literal("找不到建筑蓝图")
+                        ));
+            }
+
         }
 
         return InteractionResult.sidedSuccess(this.level().isClientSide);

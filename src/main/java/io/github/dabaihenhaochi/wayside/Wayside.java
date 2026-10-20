@@ -1,5 +1,6 @@
 package io.github.dabaihenhaochi.wayside;
 
+import io.github.dabaihenhaochi.wayside.building.BuildingInstance;
 import io.github.dabaihenhaochi.wayside.registry.ModEntities;
 import org.slf4j.Logger;
 
@@ -30,6 +31,11 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import io.github.dabaihenhaochi.wayside.building.BuildingBlueprint;
+import net.minecraft.resources.ResourceLocation;
+import io.github.dabaihenhaochi.wayside.building.BuildingManager;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Rotation;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(Wayside.MODID)
@@ -111,9 +117,57 @@ public class Wayside {
     }
 
     // You can use SubscribeEvent and let the Event Bus discover methods to call
+
+
+
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        // Do something when the server starts
-        LOGGER.info("HELLO from server starting");
+
+        var level = event.getServer().overworld();
+        BuildingManager manager = new BuildingManager(level);
+
+        LOGGER.info("[Wayside] 当前存档建筑数: {}", manager.size());
+
+        ResourceLocation id =
+                ResourceLocation.fromNamespaceAndPath(MODID, "test_house");
+
+        BuildingBlueprint.load(level, id).ifPresentOrElse(blueprint -> {
+
+            BlockPos origin = new BlockPos(0, 80, 0);
+
+            if (manager.size() == 0) {
+                var result = manager.tryRegister(
+                        blueprint,
+                        origin,
+                        Rotation.NONE
+                );
+
+                LOGGER.info(
+                        "[Wayside] 首次登记结果: {}",
+                        result.isPresent()
+                );
+            } else {
+                var result = manager.tryRegister(
+                        blueprint,
+                        origin,
+                        Rotation.NONE
+                );
+
+                LOGGER.info(
+                        "[Wayside] 同位置再次登记: {}",
+                        result.isPresent()
+                );
+            }
+
+            for (BuildingInstance building : manager.getBuildings()) {
+                LOGGER.info(
+                        "[Wayside] 已存档建筑: {}, 蓝图: {}, 位置: {}",
+                        building.id(),
+                        building.blueprintId(),
+                        building.origin()
+                );
+            }
+
+        }, () -> LOGGER.error("[Wayside] 找不到蓝图: {}", id));
     }
 }
