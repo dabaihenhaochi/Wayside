@@ -5,7 +5,7 @@ public record ActionResult(Status status, Failure failure) {
     public enum Status { RUNNING, SUCCESS, FAILED }
 
     public enum Failure {
-        NONE, INVALID_TARGET, UNREACHABLE, TIMED_OUT,
+        NONE, UNKNOWN, INVALID_TARGET, UNREACHABLE, TIMED_OUT,
         FORBIDDEN, NO_SPACE, NO_RECIPE, WORLD_CHANGED
     }
 
