@@ -7,29 +7,18 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcMoveToTargetGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcFindBlockGoal;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcHarvestBlockGoal;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
-import net.minecraft.tags.BlockTags;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Optional;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.item.ItemEntity;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcCollectItemGoal;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcCraftPlanksGoal;
 import io.github.dabaihenhaochi.wayside.building.BuildingBlueprint;
 import io.github.dabaihenhaochi.wayside.building.BuildingInstance;
 import io.github.dabaihenhaochi.wayside.building.ConstructionPlanner;
@@ -44,23 +33,7 @@ public class NpcEntity extends PathfinderMob {
     private final NpcTaskRunner taskRunner = new NpcTaskRunner(this);
     public NpcTaskRunner getTaskRunner() { return taskRunner; }
 
-    private BlockPos moveTarget;
-    private BlockPos blockTarget;
-
-    private static final long FAILED_TARGET_COOLDOWN_TICKS = 1200L;
-    private final Map<BlockPos, Long> failedBlockTargets = new HashMap<>();
-
     private final SimpleContainer inventory = new SimpleContainer(9);
-    private static final int TARGET_LOG_COUNT = 16;
-
-    public enum TaskStage {
-        COLLECTING,
-        CRAFTING,
-        COMPLETED
-    }
-
-    private TaskStage taskStage = TaskStage.COLLECTING;
-
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
     }
@@ -139,7 +112,7 @@ public class NpcEntity extends PathfinderMob {
     }
 
 
-    // Compatibility entry points for older tests and existing external callers.
+    // Compatibility with the existing GameTests; task logic lives in NpcTaskRunner.
     public void setMoveTarget(BlockPos target) {
         taskRunner.temporarilyMoveTo(target);
     }
@@ -148,15 +121,11 @@ public class NpcEntity extends PathfinderMob {
     public boolean hasMoveTarget() { return getMoveTarget() != null; }
     public void clearMoveTarget() { taskRunner.cancelManualMove(); }
     public BlockPos getBlockTarget() { return taskRunner.getBlockTarget(); }
-    /** Legacy API retained while the old Goal classes are migrated. */
-    @Deprecated
-    public void setBlockTarget(BlockPos target) { taskRunner.abandonWorkTarget(); }
     public boolean hasBlockTarget() { return getBlockTarget() != null; }
     public void clearBlockTarget() { taskRunner.abandonWorkTarget(); }
     public boolean canReachBlock(BlockPos target) {
         return NpcBlockInteraction.canWorkAt(this, target, this.position());
     }
-    public boolean planMoveToBlockTarget() { return false; }
     public void markBlockTargetFailed(BlockPos target) { taskRunner.markBlockFailed(target); }
     public boolean isBlockTargetOnCooldown(BlockPos target) {
         return taskRunner.isBlockOnCooldown(target);
@@ -208,10 +177,6 @@ public class NpcEntity extends PathfinderMob {
         return count;
     }
 
-    public boolean needsLogs() {
-        return taskRunner.description().contains("COLLECTING") && this.getLogCount() < TARGET_LOG_COUNT;
-    }
-
     public boolean wantsItem(ItemStack stack) {
         return taskRunner.wantsItem(stack);
     }
@@ -220,7 +185,6 @@ public class NpcEntity extends PathfinderMob {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
 
-        tag.putString("WaysideTaskStage", this.getTaskStage().name());
         tag.put("WaysideTask", taskRunner.save());
 
         CompoundTag inventoryTag = new CompoundTag();
@@ -238,18 +202,6 @@ public class NpcEntity extends PathfinderMob {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
 
-        this.taskStage = TaskStage.COLLECTING;
-
-        if (tag.contains("WaysideTaskStage", Tag.TAG_STRING)) {
-            try {
-                this.taskStage = TaskStage.valueOf(
-                        tag.getString("WaysideTaskStage")
-                );
-            } catch (IllegalArgumentException e) {
-                this.taskStage = TaskStage.COLLECTING;
-            }
-        }
-
         this.inventory.clearContent();
 
         if (tag.contains("WaysideInventory", Tag.TAG_COMPOUND)) {
@@ -260,27 +212,6 @@ public class NpcEntity extends PathfinderMob {
             );
         }
         taskRunner.load(tag);
-    }
-
-    public TaskStage getTaskStage() {
-        if (taskRunner.description().contains("CRAFTING")) return TaskStage.CRAFTING;
-        if (taskRunner.description().contains("COMPLETED")) return TaskStage.COMPLETED;
-        return TaskStage.COLLECTING;
-    }
-
-    private void updateTaskStage() {
-        if (this.taskStage == TaskStage.COLLECTING
-                && this.getLogCount() >= TARGET_LOG_COUNT) {
-
-            this.taskStage = TaskStage.CRAFTING;
-            this.clearBlockTarget();
-        }
-    }
-
-    public void finishCrafting() {
-        if (this.taskStage == TaskStage.CRAFTING) {
-            this.taskStage = TaskStage.COMPLETED;
-        }
     }
 
     public int getPlankCount() {

@@ -11,6 +11,7 @@ public final class NpcTaskTypes {
 
     static {
         register(GatherAndCraftPlanksTask.ID, GatherAndCraftPlanksTask::new);
+        register(VisitPositionTask.ID, VisitPositionTask::new);
     }
 
     private NpcTaskTypes() {}
