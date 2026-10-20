@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
 import io.github.dabaihenhaochi.wayside.building.BuildingBlueprint;
 import io.github.dabaihenhaochi.wayside.building.BuildingInstance;
