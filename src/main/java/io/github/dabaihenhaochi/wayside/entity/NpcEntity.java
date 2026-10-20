@@ -148,6 +148,9 @@ public class NpcEntity extends PathfinderMob {
     public boolean hasMoveTarget() { return getMoveTarget() != null; }
     public void clearMoveTarget() { taskRunner.cancelManualMove(); }
     public BlockPos getBlockTarget() { return taskRunner.getBlockTarget(); }
+    /** Legacy API retained while the old Goal classes are migrated. */
+    @Deprecated
+    public void setBlockTarget(BlockPos target) { taskRunner.abandonWorkTarget(); }
     public boolean hasBlockTarget() { return getBlockTarget() != null; }
     public void clearBlockTarget() { taskRunner.abandonWorkTarget(); }
     public boolean canReachBlock(BlockPos target) {
