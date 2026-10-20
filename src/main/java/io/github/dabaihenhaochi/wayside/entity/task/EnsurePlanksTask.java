@@ -22,6 +22,7 @@ public final class EnsurePlanksTask implements NpcTask {
     public static final String ID = "wayside:ensure_planks";
     private ItemRequirement requirement;
     private GatherResourceTask gathering;
+    private int gatheringTarget;
     private CraftSingleIngredientAction crafting;
 
     public EnsurePlanksTask() { this(20); }
@@ -36,6 +37,15 @@ public final class EnsurePlanksTask implements NpcTask {
 
     private int plankYield(NpcEntity npc) {
         ItemStack sample = new ItemStack(Items.OAK_LOG);
+        // Prefer the log actually present in inventory; oak is a fallback for
+        // planning before any logs have been collected.
+        for (int i = 0; i < npc.getInventory().getContainerSize(); i++) {
+            ItemStack available = npc.getInventory().getItem(i);
+            if (available.is(ItemTags.LOGS)) {
+                sample = available.copyWithCount(1);
+                break;
+            }
+        }
         CraftingInput input = CraftingInput.of(1, 1, List.of(sample));
         var recipe = npc.level().getRecipeManager().getRecipeFor(
                 RecipeType.CRAFTING, input, npc.level());
@@ -59,7 +69,9 @@ public final class EnsurePlanksTask implements NpcTask {
                 crafting.stop(npc);
                 crafting = null;
             }
-            if (gathering == null) {
+            if (gathering == null || gatheringTarget != logsNeeded) {
+                if (gathering != null) gathering.pause(npc);
+                gatheringTarget = logsNeeded;
                 gathering = new GatherResourceTask(
                         state -> state.is(BlockTags.LOGS),
                         stack -> stack.is(ItemTags.LOGS),
@@ -71,6 +83,7 @@ public final class EnsurePlanksTask implements NpcTask {
             if (result.isSuccess()) {
                 gathering.pause(npc);
                 gathering = null;
+                gatheringTarget = 0;
             }
             return ActionResult.running();
         }
@@ -78,6 +91,7 @@ public final class EnsurePlanksTask implements NpcTask {
         if (gathering != null) {
             gathering.pause(npc);
             gathering = null;
+            gatheringTarget = 0;
         }
         if (crafting == null) {
             crafting = new CraftSingleIngredientAction(
@@ -90,9 +104,10 @@ public final class EnsurePlanksTask implements NpcTask {
     }
 
     @Override public void pause(NpcEntity npc) {
+        // Pausing discards transient navigation, not the gathering task's
+        // unreachable-target cooldowns. They survive manual overrides/retries.
         if (gathering != null) {
             gathering.pause(npc);
-            gathering = null;
         }
         if (crafting != null) {
             crafting.stop(npc);
