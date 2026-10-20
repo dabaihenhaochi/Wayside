@@ -19,11 +19,13 @@ public final class NpcTaskRunner {
     private ActionResult lastResult = ActionResult.running();
     private MoveToAction manualMove;
 
+    //构造方法
     public NpcTaskRunner(NpcEntity npc) {
         this.npc = npc;
         this.task = new GatherAndCraftPlanksTask();
     }
 
+    //设置任务
     public void setTask(NpcTask next) {
         if (task != null) {
             task.pause(npc);
@@ -34,10 +36,12 @@ public final class NpcTaskRunner {
         lastResult = ActionResult.running();
     }
 
+    //判断是否存在正在执行的工作
     public boolean hasWork() {
         return manualMove != null || (task != null && !terminal);
     }
 
+    //更新任务状态
     public void tick() {
         if (manualMove != null) {
             ActionResult result = manualMove.tick(npc);
@@ -70,33 +74,6 @@ public final class NpcTaskRunner {
             manualMove.stop(npc);
             manualMove = null;
         }
-    }
-
-    public BlockPos getMoveTarget() {
-        return manualMove != null ? manualMove.targetPosition()
-                : task != null && !terminal ? task.activeMoveTarget() : null;
-    }
-
-    public BlockPos getBlockTarget() {
-        return task != null && !terminal && manualMove == null
-                ? task.activeBlockTarget() : null;
-    }
-
-    public void abandonWorkTarget() {
-        if (task != null && !terminal) {
-            task.abandonWorkTarget(npc);
-        }
-    }
-
-    public void markBlockFailed(BlockPos pos) {
-        if (task != null && !terminal) {
-            task.markBlockFailed(pos, npc.level().getGameTime());
-        }
-    }
-
-    public boolean isBlockOnCooldown(BlockPos pos) {
-        return task != null
-                && task.isBlockOnCooldown(pos, npc.level().getGameTime());
     }
 
     public boolean wantsItem(ItemStack stack) {

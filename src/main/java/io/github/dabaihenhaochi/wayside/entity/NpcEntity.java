@@ -31,14 +31,18 @@ import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskExecutionGoal;
 
 public class NpcEntity extends PathfinderMob {
+    //创建任务运行器
     private final NpcTaskRunner taskRunner = new NpcTaskRunner(this);
     public NpcTaskRunner getTaskRunner() { return taskRunner; }
 
+    //创建背包
     private final SimpleContainer inventory = new SimpleContainer(9);
+    //构造方法
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
     }
 
+    //npc属性：最大生命值，移动速度，目标追踪范围
     public static AttributeSupplier.Builder createAttributes() {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0)
@@ -46,6 +50,7 @@ public class NpcEntity extends PathfinderMob {
                 .add(Attributes.FOLLOW_RANGE, 32.0);
     }
 
+    //注册目标，设置优先级
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new NpcTaskExecutionGoal(this));
@@ -53,6 +58,7 @@ public class NpcEntity extends PathfinderMob {
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
     }
 
+    //玩家交互
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide) {
@@ -112,30 +118,11 @@ public class NpcEntity extends PathfinderMob {
         return InteractionResult.sidedSuccess(this.level().isClientSide);
     }
 
-
-    // Compatibility with the existing GameTests; task logic lives in NpcTaskRunner.
-    public void setMoveTarget(BlockPos target) {
-        taskRunner.temporarilyMoveTo(target);
-    }
-
-    public BlockPos getMoveTarget() { return taskRunner.getMoveTarget(); }
-    public boolean hasMoveTarget() { return getMoveTarget() != null; }
-    public void clearMoveTarget() { taskRunner.cancelManualMove(); }
-    public BlockPos getBlockTarget() { return taskRunner.getBlockTarget(); }
-    public boolean hasBlockTarget() { return getBlockTarget() != null; }
-    public void clearBlockTarget() { taskRunner.abandonWorkTarget(); }
-    public boolean canReachBlock(BlockPos target) {
-        return NpcBlockInteraction.canWorkAt(this, target, this.position());
-    }
-    public void markBlockTargetFailed(BlockPos target) { taskRunner.markBlockFailed(target); }
-    public boolean isBlockTargetOnCooldown(BlockPos target) {
-        return taskRunner.isBlockOnCooldown(target);
-    }
-
     public SimpleContainer getInventory() {
         return this.inventory;
     }
 
+    //每tick物品拾取
     @Override
     public void tick() {
         super.tick();
@@ -164,6 +151,7 @@ public class NpcEntity extends PathfinderMob {
         // TaskRunner derives work progress from the inventory on its next tick.
     }
 
+    //检索背包原木数量
     public int getLogCount() {
         int count = 0;
 
@@ -182,6 +170,7 @@ public class NpcEntity extends PathfinderMob {
         return taskRunner.wantsItem(stack);
     }
 
+    //保存背包内容
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
@@ -199,6 +188,7 @@ public class NpcEntity extends PathfinderMob {
         tag.put("WaysideInventory", inventoryTag);
     }
 
+    //加载背包内容
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
@@ -215,6 +205,7 @@ public class NpcEntity extends PathfinderMob {
         taskRunner.load(tag);
     }
 
+    //检索背包木板数量
     public int getPlankCount() {
         int count = 0;
 
