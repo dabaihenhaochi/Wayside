@@ -43,7 +43,6 @@ public final class GatherResourceTask implements NpcTask {
     private BlockPos blockTarget;
     private UUID itemTargetId;
     private long nextScan;
-    private boolean needsMore = true;
 
     public GatherResourceTask(
             Predicate<BlockState> blockFilter,
@@ -60,14 +59,9 @@ public final class GatherResourceTask implements NpcTask {
 
     @Override public String typeId() { return "wayside:gather_resource"; }
     @Override public String stageName() { return "COLLECTING"; }
-    @Override public boolean wantsItem(ItemStack item) {
-        return needsMore && itemFilter.test(item);
-    }
-
     @Override
     public ActionResult tick(NpcEntity npc) {
-        needsMore = inventoryCount.applyAsInt(npc) < required;
-        if (!needsMore) {
+        if (inventoryCount.applyAsInt(npc) >= required) {
             clearAction(npc);
             return ActionResult.success();
         }
@@ -114,14 +108,14 @@ public final class GatherResourceTask implements NpcTask {
         ItemEntity item = npc.level().getEntitiesOfClass(
                 ItemEntity.class, npc.getBoundingBox().inflate(8),
                 entity -> entity.isAlive()
-                        && wantsItem(entity.getItem())
+                        && itemFilter.test(entity.getItem())
                         && npc.getInventory().canAddItem(entity.getItem())
                         && !failedItems.isCoolingDown(entity.getUUID(), now)
         ).stream().min(Comparator.comparingDouble(npc::distanceToSqr)).orElse(null);
 
         if (item != null) {
             itemTargetId = item.getUUID();
-            action = new CollectItemAction(item);
+            action = new CollectItemAction(item, itemFilter);
             step = Step.COLLECT_ITEM;
             return ActionResult.running();
         }

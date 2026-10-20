@@ -7,7 +7,6 @@ import io.github.dabaihenhaochi.wayside.entity.action.MoveToAction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.Objects;
 
@@ -74,10 +73,6 @@ public final class NpcTaskRunner {
             manualMove.stop(npc);
             manualMove = null;
         }
-    }
-
-    public boolean wantsItem(ItemStack stack) {
-        return task != null && !terminal && manualMove == null && task.wantsItem(stack);
     }
 
     public String description() {

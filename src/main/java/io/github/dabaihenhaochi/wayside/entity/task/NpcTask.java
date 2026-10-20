@@ -4,7 +4,6 @@ import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.item.ItemStack;
 
 /** One long-running objective. Owns its sequence of reusable actions. */
 public interface NpcTask {
@@ -13,7 +12,6 @@ public interface NpcTask {
     void pause(NpcEntity npc);
     String stageName();
 
-    default boolean wantsItem(ItemStack item) { return false; }
     default BlockPos activeBlockTarget() { return null; }
     default BlockPos activeMoveTarget() { return null; }
     default void abandonWorkTarget(NpcEntity npc) {}

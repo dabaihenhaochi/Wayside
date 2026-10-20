@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import java.util.Objects;
 
@@ -42,9 +41,6 @@ public class TaskSequence implements NpcTask {
 
     @Override public void pause(NpcEntity npc) {
         if (active() != null) active().pause(npc);
-    }
-    @Override public boolean wantsItem(ItemStack item) {
-        return active() != null && active().wantsItem(item);
     }
     @Override public BlockPos activeBlockTarget() {
         return active() == null ? null : active().activeBlockTarget();

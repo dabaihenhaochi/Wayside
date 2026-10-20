@@ -15,7 +15,6 @@ import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -122,35 +121,6 @@ public class NpcEntity extends PathfinderMob {
         return this.inventory;
     }
 
-    //每tick物品拾取
-    @Override
-    public void tick() {
-        super.tick();
-
-        if (this.level().isClientSide || this.tickCount % 10 != 0) {
-            return;
-        }
-
-        for (ItemEntity item : this.level().getEntitiesOfClass(
-                ItemEntity.class,
-                this.getBoundingBox().inflate(0.5)
-        )) {
-            if (item.hasPickUpDelay() || !this.wantsItem(item.getItem())) {
-                continue;
-            }
-
-            ItemStack stack = item.getItem();
-            ItemStack remaining = this.inventory.addItem(stack.copy());
-
-            if (remaining.isEmpty()) {
-                item.discard();
-            } else {
-                item.setItem(remaining);
-            }
-        }
-        // TaskRunner derives work progress from the inventory on its next tick.
-    }
-
     //检索背包原木数量
     public int getLogCount() {
         int count = 0;
@@ -164,10 +134,6 @@ public class NpcEntity extends PathfinderMob {
         }
 
         return count;
-    }
-
-    public boolean wantsItem(ItemStack stack) {
-        return taskRunner.wantsItem(stack);
     }
 
     //保存背包内容
