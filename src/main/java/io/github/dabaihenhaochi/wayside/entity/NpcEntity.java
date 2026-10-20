@@ -37,8 +37,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Rotation;
 import java.util.UUID;
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskExecutionGoal;
 
 public class NpcEntity extends PathfinderMob {
+    private final NpcTaskRunner taskRunner = new NpcTaskRunner(this);
+    public NpcTaskRunner getTaskRunner() { return taskRunner; }
+
     private BlockPos moveTarget;
     private BlockPos blockTarget;
 
@@ -69,54 +74,18 @@ public class NpcEntity extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
-
-        this.goalSelector.addGoal(
-                0,
-                new NpcCraftPlanksGoal(this)
-        );
-
-        this.goalSelector.addGoal(
-                0,
-                new NpcHarvestBlockGoal(this)
-        );
-
-        this.goalSelector.addGoal(
-                1,
-                new NpcMoveToTargetGoal(this, 1.0)
-        );
-
-        this.goalSelector.addGoal(
-                2,
-                new NpcCollectItemGoal(this)
-        );
-
-        this.goalSelector.addGoal(
-                3,
-                new NpcFindBlockGoal(
-                        this,
-                        state -> state.is(BlockTags.LOGS)
-                )
-        );
-
-        this.goalSelector.addGoal(
-                4,
-                new LookAtPlayerGoal(this, Player.class, 8.0F)
-        );
-
-        this.goalSelector.addGoal(
-                5,
-                new RandomLookAroundGoal(this)
-        );
+        this.goalSelector.addGoal(0, new NpcTaskExecutionGoal(this));
+        this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
     }
 
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide) {
-            this.clearBlockTarget();
-            this.setMoveTarget(player.blockPosition());
+            this.taskRunner.temporarilyMoveTo(player.blockPosition());
 
             player.sendSystemMessage(Component.literal(
-                    "任务阶段：" + this.getTaskStage()
+                    "任务阶段：" + this.taskRunner.description()
                             + "，原木：" + this.getLogCount()
                             + "，木板：" + this.getPlankCount()
             ));
@@ -169,94 +138,25 @@ public class NpcEntity extends PathfinderMob {
         return InteractionResult.sidedSuccess(this.level().isClientSide);
     }
 
-    public void setMoveTarget(BlockPos moveTarget) {
-        // 外部移动命令取代采集任务；自动站位由 planMoveToBlockTarget 单独设置。
-        this.clearBlockTarget();
-        this.moveTarget = moveTarget.immutable();
+
+    // Compatibility entry points for older tests and existing external callers.
+    public void setMoveTarget(BlockPos target) {
+        taskRunner.temporarilyMoveTo(target);
     }
 
-    public BlockPos getMoveTarget() {
-        return this.moveTarget;
-    }
-
-    public boolean hasMoveTarget() {
-        return this.moveTarget != null;
-    }
-
-    public void clearMoveTarget() {
-        this.moveTarget = null;
-    }
-
-    public void setBlockTarget(BlockPos blockTarget) {
-        this.clearBlockTarget();
-        this.blockTarget = blockTarget.immutable();
-    }
-
-    public BlockPos getBlockTarget() {
-        return this.blockTarget;
-    }
-
-    public boolean hasBlockTarget() {
-        return this.blockTarget != null;
-    }
-
-    public void clearBlockTarget() {
-        if (this.blockTarget != null) {
-            this.clearMoveTarget();
-        }
-        this.blockTarget = null;
-    }
-
-    // 移动和采集共用操作距离、遮挡和落脚处检查。
+    public BlockPos getMoveTarget() { return taskRunner.getMoveTarget(); }
+    public boolean hasMoveTarget() { return getMoveTarget() != null; }
+    public void clearMoveTarget() { taskRunner.cancelManualMove(); }
+    public BlockPos getBlockTarget() { return taskRunner.getBlockTarget(); }
+    public boolean hasBlockTarget() { return getBlockTarget() != null; }
+    public void clearBlockTarget() { taskRunner.abandonWorkTarget(); }
     public boolean canReachBlock(BlockPos target) {
         return NpcBlockInteraction.canWorkAt(this, target, this.position());
     }
-
-    public boolean planMoveToBlockTarget() {
-        if (this.blockTarget == null) {
-            return false;
-        }
-
-        if (this.canReachBlock(this.blockTarget)) {
-            this.clearMoveTarget();
-            return true;
-        }
-
-        Optional<BlockPos> workPosition = NpcBlockInteraction.findWorkPosition(this, this.blockTarget);
-        if (workPosition.isEmpty()) {
-            return false;
-        }
-
-        this.moveTarget = workPosition.get();
-        return true;
-    }
-
-    public void markBlockTargetFailed(BlockPos pos) {
-        long now = this.level().getGameTime();
-
-        failedBlockTargets.entrySet().removeIf(
-                entry -> entry.getValue() <= now
-        );
-
-        failedBlockTargets.put(
-                pos.immutable(),
-                now + FAILED_TARGET_COOLDOWN_TICKS
-        );
-    }
-
-    public boolean isBlockTargetOnCooldown(BlockPos pos) {
-        Long retryTime = failedBlockTargets.get(pos);
-
-        if (retryTime == null) {
-            return false;
-        }
-
-        if (this.level().getGameTime() >= retryTime) {
-            failedBlockTargets.remove(pos);
-            return false;
-        }
-
-        return true;
+    public boolean planMoveToBlockTarget() { return false; }
+    public void markBlockTargetFailed(BlockPos target) { taskRunner.markBlockFailed(target); }
+    public boolean isBlockTargetOnCooldown(BlockPos target) {
+        return taskRunner.isBlockOnCooldown(target);
     }
 
     public SimpleContainer getInventory() {
@@ -288,7 +188,7 @@ public class NpcEntity extends PathfinderMob {
                 item.setItem(remaining);
             }
         }
-        this.updateTaskStage();
+        // TaskRunner derives work progress from the inventory on its next tick.
     }
 
     public int getLogCount() {
@@ -306,19 +206,19 @@ public class NpcEntity extends PathfinderMob {
     }
 
     public boolean needsLogs() {
-        return this.taskStage == TaskStage.COLLECTING
-                && this.getLogCount() < TARGET_LOG_COUNT;
+        return taskRunner.description().contains("COLLECTING") && this.getLogCount() < TARGET_LOG_COUNT;
     }
 
     public boolean wantsItem(ItemStack stack) {
-        return stack.is(ItemTags.LOGS) && this.needsLogs();
+        return taskRunner.wantsItem(stack);
     }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
 
-        tag.putString("WaysideTaskStage", this.taskStage.name());
+        tag.putString("WaysideTaskStage", this.getTaskStage().name());
+        tag.put("WaysideTask", taskRunner.save());
 
         CompoundTag inventoryTag = new CompoundTag();
 
@@ -356,10 +256,13 @@ public class NpcEntity extends PathfinderMob {
                     this.level().registryAccess()
             );
         }
+        taskRunner.load(tag);
     }
 
     public TaskStage getTaskStage() {
-        return this.taskStage;
+        if (taskRunner.description().contains("CRAFTING")) return TaskStage.CRAFTING;
+        if (taskRunner.description().contains("COMPLETED")) return TaskStage.COMPLETED;
+        return TaskStage.COLLECTING;
     }
 
     private void updateTaskStage() {
