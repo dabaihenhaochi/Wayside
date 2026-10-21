@@ -6,7 +6,8 @@ public record ActionResult(Status status, Failure failure) {
 
     public enum Failure {
         NONE, UNKNOWN, INVALID_TARGET, UNREACHABLE, TIMED_OUT,
-        FORBIDDEN, NO_SPACE, NO_RECIPE, WORLD_CHANGED
+        FORBIDDEN, NO_SPACE, NO_RECIPE, WORLD_CHANGED,
+        MISSING_INGREDIENT, MISSING_WORKSTATION
     }
 
     private static final ActionResult RUNNING = new ActionResult(Status.RUNNING, Failure.NONE);
