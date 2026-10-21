@@ -13,6 +13,7 @@ public final class NpcTaskTypes {
         register(GatherAndCraftPlanksTask.ID, GatherAndCraftPlanksTask::new);
         register(VisitPositionTask.ID, VisitPositionTask::new);
         register(EnsurePlanksTask.ID, EnsurePlanksTask::new);
+        register(SupplyMaterialsTask.ID, SupplyMaterialsTask::new);
     }
 
     private NpcTaskTypes() {}
