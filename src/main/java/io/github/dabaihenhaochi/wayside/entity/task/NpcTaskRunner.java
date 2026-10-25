@@ -3,14 +3,13 @@ package io.github.dabaihenhaochi.wayside.entity.task;
 import io.github.dabaihenhaochi.wayside.Wayside;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
-import io.github.dabaihenhaochi.wayside.entity.action.MoveToAction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.Objects;
 
-// 管理当前任务及其状态；手动移动临时接管，不清空任务或解除暂停。
+// 管理正式任务及其状态；临时任务可打断执行，但不丢失原任务进度。
 public final class NpcTaskRunner {
     public enum State {
         RUNNING, PAUSED, COMPLETED, FAILED, CANCELED
@@ -20,7 +19,7 @@ public final class NpcTaskRunner {
     private NpcTask task;
     private State state = State.RUNNING;
     private ActionResult lastResult = ActionResult.running();
-    private MoveToAction manualMove;
+    private NpcTask temporaryTask;
 
     public NpcTaskRunner(NpcEntity npc) {
         this.npc = npc;
@@ -29,7 +28,7 @@ public final class NpcTaskRunner {
 
     // 清理旧动作并替换任务，从运行状态开始。
     public void setTask(NpcTask next) {
-        if (state == State.RUNNING && manualMove == null) {
+        if (state == State.RUNNING && temporaryTask == null) {
             task.pause(npc);
         }
         cancelManualMove();
@@ -75,57 +74,67 @@ public final class NpcTaskRunner {
     public State state() { return state; }
     public ActionResult lastResult() { return lastResult; }
 
-    public boolean hasWork() {
-        return manualMove != null || state == State.RUNNING;
+    // 优先返回临时任务；正式任务只有在运行状态才参与执行。
+    private NpcTask activeTask() {
+        if (temporaryTask != null) {
+            return temporaryTask;
+        }
+        return state == State.RUNNING ? task : null;
     }
 
-    // 优先执行手动移动；正常任务结束后清理动作并记录结果。
+    public boolean hasWork() {
+        return activeTask() != null;
+    }
+
+    // 统一推进当前任务；临时任务结束后恢复原任务，正式任务结束时记录结果。
     public void tick() {
-        if (manualMove != null) {
-            ActionResult result = manualMove.tick(npc);
-            if (!result.isRunning()) {
-                cancelManualMove();
-            }
+        NpcTask current = activeTask();
+        if (current == null) {
             return;
         }
-        if (state != State.RUNNING) {
-            return;
-        }
-        ActionResult result = task.tick(npc);
+
+        ActionResult result = current.tick(npc);
         if (result.isRunning()) {
             return;
         }
-        task.pause(npc);
+
+        current.pause(npc);
+        if (current == temporaryTask) {
+            temporaryTask = null;
+            return;
+        }
+
         lastResult = result;
         state = result.isSuccess() ? State.COMPLETED : State.FAILED;
     }
 
-    // 临时移动结束后，仅当原任务仍为运行状态才继续。
+    // 用移动任务临时接管执行；只在首次打断时暂停原任务。
     public void temporarilyMoveTo(BlockPos pos) {
         Objects.requireNonNull(pos);
-        if (state == State.RUNNING && manualMove == null) {
+        if (state == State.RUNNING && temporaryTask == null) {
             task.pause(npc);
         }
         cancelManualMove();
-        manualMove = new MoveToAction(pos, 1.0);
+        temporaryTask = new VisitPositionTask(pos);
     }
 
+    // 清除临时任务并停止其动作，不修改正式任务的状态和进度。
     public void cancelManualMove() {
-        if (manualMove != null) {
-            manualMove.stop(npc);
-            manualMove = null;
+        if (temporaryTask != null) {
+            temporaryTask.pause(npc);
+            temporaryTask = null;
         }
     }
 
-    // 诊断信息只反映当前目标，不推进任务。
+    // 查询当前执行任务的目标，不推进任务。
     public BlockPos activeMoveTarget() {
-        if (manualMove != null) return manualMove.targetPosition();
-        return state == State.RUNNING ? task.activeMoveTarget() : null;
+        NpcTask current = activeTask();
+        return current == null ? null : current.activeMoveTarget();
     }
 
     public BlockPos activeBlockTarget() {
-        return manualMove == null && state == State.RUNNING
-                ? task.activeBlockTarget() : null;
+        NpcTask current = activeTask();
+        return current == null ? null : current.activeBlockTarget();
     }
 
     public boolean isBlockOnCooldown(BlockPos pos) {
