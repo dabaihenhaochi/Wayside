@@ -7,7 +7,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-/** Recipe-based 1x1 crafting until no matching ingredients remain. */
+// 持续执行 1×1 合成，直到匹配原料耗尽。
 public final class CraftUntilExhaustedTask implements NpcTask {
     private final Predicate<ItemStack> ingredient;
     private final Predicate<ItemStack> product;
@@ -24,6 +24,7 @@ public final class CraftUntilExhaustedTask implements NpcTask {
         if (action == null) action = new CraftSingleIngredientAction(ingredient, product);
         return action.tick(npc);
     }
+    // 释放临时合成动作，继续时重新创建。
     @Override public void pause(NpcEntity npc) {
         if (action != null) {
             action.stop(npc);

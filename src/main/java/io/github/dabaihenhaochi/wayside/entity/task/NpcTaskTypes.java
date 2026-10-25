@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-/** Explicit task factory; not a Minecraft registry. */
+// 按任务 ID 创建实例，独立于 Minecraft 注册表。
 public final class NpcTaskTypes {
     private static final Map<String, Supplier<? extends NpcTask>> TYPES = new HashMap<>();
 
@@ -18,12 +18,14 @@ public final class NpcTaskTypes {
 
     private NpcTaskTypes() {}
 
+    // 登记任务工厂，拒绝重复 ID。
     public static void register(String id, Supplier<? extends NpcTask> factory) {
         if (TYPES.putIfAbsent(id, factory) != null) {
             throw new IllegalArgumentException("Duplicate NPC task type: " + id);
         }
     }
 
+    // 按 ID 新建任务，未知 ID 返回空。
     public static Optional<NpcTask> create(String id) {
         Supplier<? extends NpcTask> factory = TYPES.get(id);
         return factory == null ? Optional.empty() : Optional.of(factory.get());

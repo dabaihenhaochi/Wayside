@@ -5,7 +5,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 
 import java.util.EnumSet;
 
-/** A single adapter to vanilla's GoalSelector; task ordering lives in NpcTask. */
+// 将服务端任务更新接入原版目标系统，占用移动和注视控制。
 public final class NpcTaskExecutionGoal extends Goal {
     private final NpcEntity npc;
 

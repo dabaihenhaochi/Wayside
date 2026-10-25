@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-/** Recipe-driven 1x1 crafting. Larger grids will be a separate extension. */
+// 使用原版 1×1 配方持续合成匹配的原料。
 public final class CraftSingleIngredientAction implements NpcAction {
     private static final long INTERVAL_TICKS = 20;
 
@@ -26,6 +26,7 @@ public final class CraftSingleIngredientAction implements NpcAction {
         this.output = Objects.requireNonNull(output);
     }
 
+    // 按间隔尝试配方；原料耗尽则成功，有原料却无匹配产物则失败。
     @Override
     public ActionResult tick(NpcEntity npc) {
         long now = npc.level().getGameTime();
@@ -61,6 +62,7 @@ public final class CraftSingleIngredientAction implements NpcAction {
                 continue;
             }
 
+            // 先模拟扣料和装入产物，避免背包满时损失原料。
             SimpleContainer simulated = new SimpleContainer(inventory.getContainerSize());
             for (int j = 0; j < inventory.getContainerSize(); j++) {
                 simulated.setItem(j, inventory.getItem(j).copy());

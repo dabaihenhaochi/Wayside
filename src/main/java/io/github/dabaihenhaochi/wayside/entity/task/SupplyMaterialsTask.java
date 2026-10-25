@@ -23,14 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * Executes a material plan using the NPC's own inventory during early survival.
- * For now, the only producible base resource is an oak log gathered in-world.
- * A settlement storage/production provider can replace that source later.
- *
- * The plan is not persisted. On interruption or reload it is rebuilt from
- * the actual inventory, so partially completed crafting is never replayed.
- */
+// 根据背包规划采集和合成，目前仅能采集橡木；中断后按实际库存重新规划。
 public final class SupplyMaterialsTask implements NpcTask {
     public static final String ID = "wayside:supply_materials";
     private final Map<Item, Integer> requested = new LinkedHashMap<>();
@@ -41,7 +34,7 @@ public final class SupplyMaterialsTask implements NpcTask {
     private GatherResourceTask gathering;
     private int gatherTarget;
 
-    /** Factory constructor for task deserialization. */
+    // 供存档工厂创建，随后加载保存的需求。
     public SupplyMaterialsTask() {
         this(Map.of(Items.OAK_STAIRS, 8));
     }
@@ -50,6 +43,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         setRequested(requested);
     }
 
+    // 先校验全部需求，再替换为独立副本。
     private void setRequested(Map<Item, Integer> items) {
         Objects.requireNonNull(items);
         if (items.isEmpty()) throw new IllegalArgumentException("Empty material request");
@@ -74,6 +68,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         return "PLANNING";
     }
 
+    // 依次完成规划、补齐原木、执行配方，最后核验实际库存达标。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (!(npc.level() instanceof ServerLevel level)) {
@@ -85,8 +80,7 @@ public final class SupplyMaterialsTask implements NpcTask {
                     level, requested, npc.getInventory(), Set.of(Items.OAK_LOG));
             craftStepIndex = 0;
             craftAction = null;
-            // Fix the collection target at planning time. It must not grow
-            // each time a log enters the inventory.
+            // 在规划时固定原木总量目标，避免每次拾取后目标随之增加。
             int newTarget = count(npc.getInventory(), Items.OAK_LOG)
                     + plan.requiredSupplies().getOrDefault(Items.OAK_LOG, 0);
             if (gathering != null && gatherTarget != newTarget) {
@@ -100,7 +94,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         }
 
         int additionalLogs = plan.requiredSupplies().getOrDefault(Items.OAK_LOG, 0);
-        // Do not silently claim arbitrary materials can be produced.
+        // 当前只提供橡木采集，其他外部材料需求直接报告失败。
         if (plan.requiredSupplies().size() > (additionalLogs > 0 ? 1 : 0)) {
             return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
         }
@@ -113,8 +107,7 @@ public final class SupplyMaterialsTask implements NpcTask {
                         actor -> count(actor.getInventory(), Items.OAK_LOG),
                         gatherTarget);
             }
-            // The requirement was already accounted for in the plan. The
-            // gathering target is fixed until the next replanning event.
+            // 本次计划沿用固定采集目标，直到重新规划。
             ActionResult gathered = gathering.tick(npc);
             if (gathered.isFailed()) return gathered;
             if (!gathered.isSuccess()) return ActionResult.running();
@@ -122,8 +115,7 @@ public final class SupplyMaterialsTask implements NpcTask {
             gathering.pause(npc);
             gathering = null;
             gatherTarget = 0;
-            // Remove supplied items from the original plan once acquired:
-            // future ticks must not recreate the gathering child.
+            // 补给到位后清空待补项，避免下一 tick 再次创建采集任务。
             plan = new MaterialPlan(plan.craftSteps(), Map.of(), plan.unavailable());
         } else if (gathering != null) {
             gathering.pause(npc);
@@ -145,7 +137,7 @@ public final class SupplyMaterialsTask implements NpcTask {
             return ActionResult.running();
         }
 
-        // A plan is calculated from an inventory snapshot; verify reality.
+        // 计划基于旧库存快照，结束前再次核验真实数量。
         for (var entry : requested.entrySet()) {
             if (count(npc.getInventory(), entry.getKey()) < entry.getValue()) {
                 return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
@@ -172,8 +164,7 @@ public final class SupplyMaterialsTask implements NpcTask {
             craftAction.stop(npc);
             craftAction = null;
         }
-        // The stored inventory reflects every committed craft.
-        // Recompute the plan on resume/retry rather than replaying those crafts.
+        // 已完成合成已写入背包，继续时重新规划，避免重复执行。
         plan = null;
         craftStepIndex = 0;
     }
@@ -198,6 +189,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         if (gathering != null) gathering.markBlockFailed(pos, now);
     }
 
+    // 只保存最终物品需求，临时采集和合成计划不写入存档。
     @Override
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
@@ -212,6 +204,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         return tag;
     }
 
+    // 过滤无效需求并合并重复物品，清空临时状态以便重新规划。
     @Override
     public void load(CompoundTag tag) {
         if (tag.contains("Requested", Tag.TAG_LIST)) {

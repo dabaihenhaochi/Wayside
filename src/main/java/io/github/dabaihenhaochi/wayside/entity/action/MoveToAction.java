@@ -7,7 +7,7 @@ import net.minecraft.world.entity.Entity;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-/** Generic movement to a position or a live entity; no resource-specific policy. */
+// 移动到固定位置或跟随实体，由到达条件决定何时结束。
 public final class MoveToAction implements NpcAction {
     private static final long TIMEOUT_TICKS = 600;
     private static final long RETRY_TICKS = 20;
@@ -20,7 +20,7 @@ public final class MoveToAction implements NpcAction {
     private long startTime = -1;
     private long nextRetryTime;
 
-    //普通移动
+    // 默认到达范围为距目标格底部中心 1.5 格以内。
     public MoveToAction(BlockPos position, double speed) {
         this(position, speed, npc -> {
             double dx = npc.getX() - (position.getX() + 0.5);
@@ -30,7 +30,6 @@ public final class MoveToAction implements NpcAction {
         });
     }
 
-    //移动至目标方块
     public MoveToAction(BlockPos position, double speed, Predicate<NpcEntity> reached) {
         this.positionTarget = Objects.requireNonNull(position).immutable();
         this.entityTarget = null;
@@ -38,7 +37,6 @@ public final class MoveToAction implements NpcAction {
         this.reached = Objects.requireNonNull(reached);
     }
 
-    //移动至目标物品
     public MoveToAction(Entity entity, double speed, Predicate<NpcEntity> reached) {
         this.positionTarget = null;
         this.entityTarget = Objects.requireNonNull(entity);
@@ -46,12 +44,11 @@ public final class MoveToAction implements NpcAction {
         this.reached = Objects.requireNonNull(reached);
     }
 
-    //获取目标坐标
     public BlockPos targetPosition() {
         return entityTarget != null ? entityTarget.blockPosition() : positionTarget;
     }
 
-    //任务判定
+    // 检查目标和超时；导航结束但尚未到达时，按间隔重新寻路。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (entityTarget != null && !entityTarget.isAlive()) {
@@ -90,7 +87,6 @@ public final class MoveToAction implements NpcAction {
         return ActionResult.running();
     }
 
-    //停止移动
     @Override
     public void stop(NpcEntity npc) {
         npc.getNavigation().stop();

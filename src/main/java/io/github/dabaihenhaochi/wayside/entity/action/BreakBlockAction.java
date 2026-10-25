@@ -11,7 +11,7 @@ import net.neoforged.neoforge.event.EventHooks;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-/** Works on any matched block. The caller chooses what block is worth breaking. */
+// 持续破坏调用方允许的目标方块。
 public final class BreakBlockAction implements NpcAction {
     private static final long WORK_TICKS = 40;
     private static final long SWING_TICKS = 10;
@@ -28,6 +28,7 @@ public final class BreakBlockAction implements NpcAction {
         this.allowedTarget = Objects.requireNonNull(allowedTarget);
     }
 
+    // 持续校验目标、权限和可达性，更新破坏进度，到时生成正常掉落。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (!npc.level().hasChunkAt(pos)) {
@@ -86,6 +87,7 @@ public final class BreakBlockAction implements NpcAction {
         return ActionResult.success();
     }
 
+    // 结束或中断时清除方块裂纹。
     @Override
     public void stop(NpcEntity npc) {
         npc.level().destroyBlockProgress(npc.getId(), pos, -1);

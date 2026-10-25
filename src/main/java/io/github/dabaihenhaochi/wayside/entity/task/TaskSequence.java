@@ -9,7 +9,7 @@ import net.minecraft.nbt.Tag;
 import java.util.List;
 import java.util.Objects;
 
-/** Sequentially executes task components without knowing which actions they use. */
+// 依次执行子任务，保存当前步骤和各步骤的进度。
 public class TaskSequence implements NpcTask {
     private final String id;
     private final List<NpcTask> steps;
@@ -28,6 +28,7 @@ public class TaskSequence implements NpcTask {
         return task == null ? "COMPLETED" : task.stageName();
     }
 
+    // 子任务成功后进入下一步，失败则交给上层处理。
     @Override public ActionResult tick(NpcEntity npc) {
         NpcTask task = active();
         if (task == null) return ActionResult.success();
@@ -58,6 +59,7 @@ public class TaskSequence implements NpcTask {
         if (active() != null) active().markBlockFailed(pos, now);
     }
 
+    // 保存步骤索引及每个子任务的数据。
     @Override public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("Current", current);
@@ -67,8 +69,8 @@ public class TaskSequence implements NpcTask {
         return tag;
     }
 
+    // 恢复步骤并限制索引范围，兼容旧版阶段字符串。
     @Override public void load(CompoundTag tag) {
-        // Legacy v0.0.6 and initial v0.0.7 stored a single stage string.
         if (tag.contains("Stage", Tag.TAG_STRING)) {
             current = switch (tag.getString("Stage")) {
                 case "CRAFTING" -> Math.min(1, steps.size());

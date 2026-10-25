@@ -29,6 +29,7 @@ import java.util.UUID;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskExecutionGoal;
 
+// 连接任务运行器、背包和玩家交互。
 public class NpcEntity extends PathfinderMob {
     //创建任务运行器
     private final NpcTaskRunner taskRunner = new NpcTaskRunner(this);
@@ -36,7 +37,6 @@ public class NpcEntity extends PathfinderMob {
 
     //创建背包
     private final SimpleContainer inventory = new SimpleContainer(9);
-    //构造方法
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
     }
@@ -57,7 +57,7 @@ public class NpcEntity extends PathfinderMob {
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
     }
 
-    //玩家交互
+    // 服务端响应玩家交互：临时移动到玩家位置，并展示测试建筑的施工差异。
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide) {
@@ -136,7 +136,7 @@ public class NpcEntity extends PathfinderMob {
         return count;
     }
 
-    //保存背包内容
+    // 保存任务状态和背包内容。
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
@@ -154,7 +154,7 @@ public class NpcEntity extends PathfinderMob {
         tag.put("WaysideInventory", inventoryTag);
     }
 
-    //加载背包内容
+    // 先恢复背包，再加载任务，供后续按实际库存规划。
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);

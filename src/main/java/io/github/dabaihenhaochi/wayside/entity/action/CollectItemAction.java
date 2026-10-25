@@ -7,11 +7,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-/**
- * Moves to a selected dropped-item entity and transfers it to the NPC inventory.
- * The calling task supplies the allowed item predicate. This action never
- * consults the task runner or decides whether the NPC needs that item.
- */
+// 靠近指定掉落物并放入背包，物品筛选条件由任务提供。
 public final class CollectItemAction implements NpcAction {
     private static final long TIMEOUT_TICKS = 200;
     private final ItemEntity item;
@@ -26,6 +22,7 @@ public final class CollectItemAction implements NpcAction {
                 inPickupReach(npc));
     }
 
+    // 检查目标、超时和背包空间，拾取后保留装不下的剩余物品。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (!item.isAlive() || item.getItem().isEmpty()
@@ -47,7 +44,7 @@ public final class CollectItemAction implements NpcAction {
         }
 
         if (inPickupReach(npc)) {
-            // Vanilla dropped items can have a brief pickup delay.
+            // 等待原版掉落物的拾取延迟结束。
             if (item.hasPickUpDelay()) {
                 return ActionResult.running();
             }
@@ -65,8 +62,7 @@ public final class CollectItemAction implements NpcAction {
             return ActionResult.success();
         }
 
-        // Navigation can stop just short of the item; use movement control to
-        // finish the final approach only when close enough and unobstructed.
+        // 寻路提前停下时，仅在近距离且无遮挡处补上最后一段移动。
         if (npc.getNavigation().isDone()
                 && npc.distanceToSqr(item) < 9.0
                 && Math.abs(npc.getY() - item.getY()) < 1.0
@@ -79,6 +75,7 @@ public final class CollectItemAction implements NpcAction {
         return moveResult.isFailed() ? moveResult : ActionResult.running();
     }
 
+    // 同时检查碰撞范围、高度差和视线，避免隔墙或跨层拾取。
     private boolean inPickupReach(NpcEntity npc) {
         return npc.getBoundingBox().inflate(0.5).intersects(item.getBoundingBox())
                 && Math.abs(npc.getY() - item.getY()) < 1.0

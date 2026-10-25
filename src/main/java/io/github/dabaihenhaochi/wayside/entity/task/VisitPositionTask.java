@@ -7,13 +7,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import java.util.Objects;
 
-/** Second consumer of generic movement: visit a position without harvesting. */
+// 复用移动动作前往指定位置，并保存目的地。
 public final class VisitPositionTask implements NpcTask {
     public static final String ID = "wayside:visit_position";
     private BlockPos destination;
     private MoveToAction action;
 
-    public VisitPositionTask() { this(BlockPos.ZERO); } // For save/load factory.
+    public VisitPositionTask() { this(BlockPos.ZERO); } // 供存档工厂创建。
     public VisitPositionTask(BlockPos destination) {
         this.destination = Objects.requireNonNull(destination).immutable();
     }
@@ -24,6 +24,7 @@ public final class VisitPositionTask implements NpcTask {
         if (action == null) action = new MoveToAction(destination, 1.0);
         return action.tick(npc);
     }
+    // 停止导航并释放动作，继续时从当前位置重新寻路。
     @Override public void pause(NpcEntity npc) {
         if (action != null) {
             action.stop(npc);

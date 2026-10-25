@@ -5,7 +5,7 @@ import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
-/** One long-running objective. Owns its sequence of reusable actions. */
+// 长期任务接口，负责安排动作和保留自身进度。
 public interface NpcTask {
     String typeId();
     ActionResult tick(NpcEntity npc);

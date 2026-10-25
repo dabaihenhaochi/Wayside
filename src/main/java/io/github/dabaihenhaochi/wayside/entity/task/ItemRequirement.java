@@ -7,10 +7,7 @@ import net.minecraft.world.item.Item;
 
 import java.util.Objects;
 
-/**
- * Inventory target, not a request to craft this many additional items.
- * Existing matching stacks count toward the target.
- */
+// 按物品标签设定背包总量目标，已有库存也计入。
 public record ItemRequirement(TagKey<Item> itemTag, int totalCount) {
     public ItemRequirement {
         Objects.requireNonNull(itemTag, "itemTag");
@@ -23,6 +20,7 @@ public record ItemRequirement(TagKey<Item> itemTag, int totalCount) {
         return !stack.isEmpty() && stack.is(itemTag);
     }
 
+    // 汇总所有匹配标签的物品堆数量。
     public int count(SimpleContainer inventory) {
         int count = 0;
         for (int i = 0; i < inventory.getContainerSize(); i++) {
@@ -34,6 +32,7 @@ public record ItemRequirement(TagKey<Item> itemTag, int totalCount) {
         return count;
     }
 
+    // 计算距离目标总量还缺多少，最低为零。
     public int missing(SimpleContainer inventory) {
         return Math.max(0, totalCount - count(inventory));
     }

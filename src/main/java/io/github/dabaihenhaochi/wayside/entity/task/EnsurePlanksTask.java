@@ -13,11 +13,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 
 import java.util.List;
 
-/**
- * First inventory-driven material objective: ensure at least N planks.
- * Gathers missing logs, then uses vanilla 1x1 recipes. It never crafts
- * merely because logs remain after the requested number is reached.
- */
+// 按木板总量补齐缺口，缺原木时先采集，木板达标即停止。
 public final class EnsurePlanksTask implements NpcTask {
     public static final String ID = "wayside:ensure_planks";
     private ItemRequirement requirement;
@@ -35,10 +31,10 @@ public final class EnsurePlanksTask implements NpcTask {
         return gathering != null ? "GATHERING" : "CRAFTING_OR_CHECKING";
     }
 
+    // 查询一根原木的木板产量，用于估算缺口。
     private int plankYield(NpcEntity npc) {
         ItemStack sample = new ItemStack(Items.OAK_LOG);
-        // Prefer the log actually present in inventory; oak is a fallback for
-        // planning before any logs have been collected.
+        // 优先使用背包中的原木；尚无原木时以橡木估算。
         for (int i = 0; i < npc.getInventory().getContainerSize(); i++) {
             ItemStack available = npc.getInventory().getItem(i);
             if (available.is(ItemTags.LOGS)) {
@@ -54,6 +50,7 @@ public final class EnsurePlanksTask implements NpcTask {
         return result.is(ItemTags.PLANKS) ? result.getCount() : 0;
     }
 
+    // 按木板缺口向上取整所需原木数，再切换采集或合成。
     @Override public ActionResult tick(NpcEntity npc) {
         int missing = requirement.missing(npc.getInventory());
         if (missing == 0) {
@@ -104,8 +101,7 @@ public final class EnsurePlanksTask implements NpcTask {
     }
 
     @Override public void pause(NpcEntity npc) {
-        // Pausing discards transient navigation, not the gathering task's
-        // unreachable-target cooldowns. They survive manual overrides/retries.
+        // 暂停时清理临时动作，保留采集子任务的失败冷却。
         if (gathering != null) {
             gathering.pause(npc);
         }

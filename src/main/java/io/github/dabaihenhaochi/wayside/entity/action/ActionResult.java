@@ -1,6 +1,6 @@
 package io.github.dabaihenhaochi.wayside.entity.action;
 
-/** One tick's observable outcome of an action (or task). */
+// 表示动作或任务本次更新的状态及失败原因。
 public record ActionResult(Status status, Failure failure) {
     public enum Status { RUNNING, SUCCESS, FAILED }
 

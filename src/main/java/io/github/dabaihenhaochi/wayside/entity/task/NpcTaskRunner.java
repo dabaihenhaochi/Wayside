@@ -10,10 +10,7 @@ import net.minecraft.nbt.Tag;
 
 import java.util.Objects;
 
-/**
- * Controls one foreground task. Manual movement is a temporary override;
- * it does not erase the task or silently unpause a paused task.
- */
+// 管理当前任务及其状态；手动移动临时接管，不清空任务或解除暂停。
 public final class NpcTaskRunner {
     public enum State {
         RUNNING, PAUSED, COMPLETED, FAILED, CANCELED
@@ -30,7 +27,7 @@ public final class NpcTaskRunner {
         this.task = new GatherAndCraftPlanksTask();
     }
 
-    /** Replace the objective, discarding its previous unfinished work. */
+    // 清理旧动作并替换任务，从运行状态开始。
     public void setTask(NpcTask next) {
         if (state == State.RUNNING && manualMove == null) {
             task.pause(npc);
@@ -41,7 +38,7 @@ public final class NpcTaskRunner {
         lastResult = ActionResult.running();
     }
 
-    /** Temporarily release the active action, keeping the task's progress. */
+    // 取消手动移动并暂停任务，保留任务进度。
     public void pause() {
         cancelManualMove();
         if (state == State.RUNNING) {
@@ -56,7 +53,7 @@ public final class NpcTaskRunner {
         }
     }
 
-    /** A failed task is not retried without an explicit request. */
+    // 仅在明确重试时重新运行失败的任务。
     public void retry() {
         if (state == State.FAILED) {
             state = State.RUNNING;
@@ -64,7 +61,7 @@ public final class NpcTaskRunner {
         }
     }
 
-    /** Cancel without pretending that work has completed successfully. */
+    // 清理当前动作，将未结束的任务标记为取消。
     public void cancel() {
         cancelManualMove();
         if (state == State.RUNNING) {
@@ -82,6 +79,7 @@ public final class NpcTaskRunner {
         return manualMove != null || state == State.RUNNING;
     }
 
+    // 优先执行手动移动；正常任务结束后清理动作并记录结果。
     public void tick() {
         if (manualMove != null) {
             ActionResult result = manualMove.tick(npc);
@@ -102,7 +100,7 @@ public final class NpcTaskRunner {
         state = result.isSuccess() ? State.COMPLETED : State.FAILED;
     }
 
-    /** Interrupt ongoing work to visit a position, then resume if still running. */
+    // 临时移动结束后，仅当原任务仍为运行状态才继续。
     public void temporarilyMoveTo(BlockPos pos) {
         Objects.requireNonNull(pos);
         if (state == State.RUNNING && manualMove == null) {
@@ -119,7 +117,7 @@ public final class NpcTaskRunner {
         }
     }
 
-    /** Read-only diagnostics; neither of these methods edits the active task. */
+    // 诊断信息只反映当前目标，不推进任务。
     public BlockPos activeMoveTarget() {
         if (manualMove != null) return manualMove.targetPosition();
         return state == State.RUNNING ? task.activeMoveTarget() : null;
@@ -139,6 +137,7 @@ public final class NpcTaskRunner {
                 + (state == State.FAILED ? " (" + lastResult.failure() + ")" : "");
     }
 
+    // 保存任务类型、进度和运行状态，失败时同时保存原因。
     public CompoundTag save() {
         CompoundTag result = new CompoundTag();
         result.putString("Type", task.typeId());
@@ -147,13 +146,14 @@ public final class NpcTaskRunner {
         if (state == State.FAILED) {
             result.putString("LastFailure", lastResult.failure().name());
         }
-        // Old versions used Terminal; keep it readable by older code.
+        // 保留旧版 Terminal 字段，供旧代码读取。
         result.putBoolean("Terminal", state == State.COMPLETED
                 || state == State.FAILED || state == State.CANCELED);
-        // A manual move is transient: it is not continued after a world reload.
+        // 手动移动属于临时指令，重载世界后不恢复。
         return result;
     }
 
+    // 按任务类型恢复进度和状态，兼容旧存档；未知类型退回默认采木任务。
     public void load(CompoundTag entityTag) {
         cancelManualMove();
         if (state == State.RUNNING) {
@@ -186,7 +186,7 @@ public final class NpcTaskRunner {
                     try {
                         failure = ActionResult.Failure.valueOf(saved.getString("LastFailure"));
                     } catch (IllegalArgumentException ignored) {
-                        // Preserve the failed state even if its reason is unknown.
+                        // 无法识别原因时仍保留失败状态。
                     }
                     lastResult = ActionResult.failed(
                             failure == ActionResult.Failure.NONE
@@ -199,7 +199,7 @@ public final class NpcTaskRunner {
             Wayside.LOGGER.warn("[Wayside] Unknown NPC task {}, defaulting to wood task", id);
         }
 
-        // Recover save data from v0.0.6, before the task runner existed.
+        // 兼容尚未引入运行器的 v0.0.6 阶段字段。
         if (entityTag.contains("WaysideTaskStage", Tag.TAG_STRING)) {
             CompoundTag legacy = new CompoundTag();
             legacy.putString("Stage", entityTag.getString("WaysideTaskStage"));

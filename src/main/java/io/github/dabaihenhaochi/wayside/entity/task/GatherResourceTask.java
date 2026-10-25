@@ -18,10 +18,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
-/**
- * Searches, walks to a work position, breaks and collects a resource.
- * The filters and inventory counter are supplied by the calling objective.
- */
+// 组合搜索、移动、破坏和拾取，直到调用方要求的库存数量达标。
 public final class GatherResourceTask implements NpcTask {
     private static final int SCAN_INTERVAL = 20;
     private static final int HORIZONTAL_RANGE = 8;
@@ -59,6 +56,7 @@ public final class GatherResourceTask implements NpcTask {
 
     @Override public String typeId() { return "wayside:gather_resource"; }
     @Override public String stageName() { return "COLLECTING"; }
+    // 推进当前动作，失败目标进入冷却；优先拾取掉落物，再寻找资源方块。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (inventoryCount.applyAsInt(npc) >= required) {
@@ -66,7 +64,7 @@ public final class GatherResourceTask implements NpcTask {
             return ActionResult.success();
         }
 
-        // If the world has changed during travel, discard the obsolete target.
+        // 行进途中目标失效时，丢弃旧动作和站位。
         if (blockTarget != null && !isValidBlock(npc, blockTarget)) {
             clearAction(npc);
         }
@@ -80,6 +78,7 @@ public final class GatherResourceTask implements NpcTask {
             UUID attemptedItem = itemTargetId;
             clearAction(npc);
 
+            // 背包满时上报失败，其余失败先记冷却，再继续寻找目标。
             if (result.isFailed()) {
                 if (finished == Step.COLLECT_ITEM && attemptedItem != null) {
                     failedItems.mark(attemptedItem, npc.level().getGameTime(), FAILED_ITEM_TICKS);
@@ -104,7 +103,7 @@ public final class GatherResourceTask implements NpcTask {
         if (!npc.onGround() || now < nextScan) return ActionResult.running();
         nextScan = now + SCAN_INTERVAL;
 
-        // Dropped resources are picked up before more blocks are harvested.
+        // 先收集可装入背包且未冷却的附近掉落物。
         ItemEntity item = npc.level().getEntitiesOfClass(
                 ItemEntity.class, npc.getBoundingBox().inflate(8),
                 entity -> entity.isAlive()
@@ -134,6 +133,7 @@ public final class GatherResourceTask implements NpcTask {
         return ActionResult.running();
     }
 
+    // 能直接操作则开始破坏，否则寻找站位；无路可达时记入冷却。
     private void beginBlockWork(NpcEntity npc) {
         if (NpcBlockInteraction.canWorkAt(npc, blockTarget, npc.position())) {
             action = new BreakBlockAction(blockTarget, blockFilter);
@@ -159,6 +159,7 @@ public final class GatherResourceTask implements NpcTask {
                 && blockFilter.test(npc.level().getBlockState(pos));
     }
 
+    // 停止动作并清空临时目标，保留失败冷却记录。
     private void clearAction(NpcEntity npc) {
         if (action != null) action.stop(npc);
         action = null;

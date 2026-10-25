@@ -17,11 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Executes one exact recipe step from MaterialPlan.
- * Does not select recipes or gather materials. Every craft is simulated
- * before any inventory mutation, so missing inputs/no space are atomic.
- */
+// 执行计划指定的配方；每次先模拟库存，全部检查通过后才提交。
 public final class CraftRecipeAction implements NpcAction {
     private static final long INTERVAL_TICKS = 20;
     private static final int WORKBENCH_RANGE = 3;
@@ -33,6 +29,7 @@ public final class CraftRecipeAction implements NpcAction {
         this.step = Objects.requireNonNull(step);
     }
 
+    // 按间隔执行计划次数，核验工作台、原料和产物，失败时保留本次合成前的库存。
     @Override
     public ActionResult tick(NpcEntity npc) {
         if (completedCrafts >= step.crafts()) {
@@ -71,7 +68,7 @@ public final class CraftRecipeAction implements NpcAction {
                 return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
             }
             ItemStack chosen = simulated.getItem(slot).copyWithCount(1);
-            // Handling recipe remainders (e.g. buckets) requires an extension.
+            // 暂不处理桶等合成后返还物。
             if (chosen.hasCraftingRemainingItem()) {
                 return ActionResult.failed(ActionResult.Failure.NO_RECIPE);
             }
@@ -93,7 +90,7 @@ public final class CraftRecipeAction implements NpcAction {
         if (!simulated.addItem(output.copy()).isEmpty()) {
             return ActionResult.failed(ActionResult.Failure.NO_SPACE);
         }
-        // Commit the complete simulated craft only after every check passed.
+        // 确认原料和产物均有效且能装入背包后，一次性提交本次合成。
         for (int i = 0; i < original.getContainerSize(); i++) {
             original.setItem(i, simulated.getItem(i).copy());
         }
@@ -111,6 +108,7 @@ public final class CraftRecipeAction implements NpcAction {
         return -1;
     }
 
+    // 复制物品堆，避免模拟扣料时影响真实背包。
     private static SimpleContainer copyInventory(SimpleContainer inventory) {
         SimpleContainer copy = new SimpleContainer(inventory.getContainerSize());
         for (int i = 0; i < inventory.getContainerSize(); i++) {
@@ -119,7 +117,7 @@ public final class CraftRecipeAction implements NpcAction {
         return copy;
     }
 
-    /** Temporary workstation rule: a 3x3 recipe needs a nearby crafting table. */
+    // 超出 2×2 的配方暂以附近存在已加载的工作台为条件。
     private static boolean hasWorkstation(NpcEntity npc) {
         BlockPos center = npc.blockPosition();
         for (int x = -WORKBENCH_RANGE; x <= WORKBENCH_RANGE; x++) {
