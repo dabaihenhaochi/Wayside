@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+// 查找可站立、可寻路且能实际操作目标方块的位置。
 public final class NpcBlockInteraction {
 
     private static final double REACH = 2.5;
@@ -27,6 +28,7 @@ public final class NpcBlockInteraction {
     private NpcBlockInteraction() {
     }
 
+    // 从假定站位检查支撑、操作距离和射线是否直接命中目标。
     public static boolean canWorkAt(NpcEntity npc, BlockPos target, Vec3 feet) {
         Level level = npc.level();
         if (!level.hasChunkAt(target) || !hasStandingSpace(npc, target, feet)) {
@@ -45,6 +47,7 @@ public final class NpcBlockInteraction {
         return hit.getType() == HitResult.Type.BLOCK && target.equals(hit.getBlockPos());
     }
 
+    // 筛选附近站位，优先操作余量和距离，并限制寻路尝试次数。
     public static Optional<BlockPos> findWorkPosition(NpcEntity npc, BlockPos target) {
         List<BlockPos> candidates = new ArrayList<>();
         // 候选是 NPC 脚底的格子，不是待采集的方块。
