@@ -1,11 +1,8 @@
 package io.github.dabaihenhaochi.wayside.building;
 
-import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.SlabType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,7 +17,7 @@ import java.util.Objects;
  * This class does not read an inventory, decide how to make an item, or
  * mutate the world. It is the boundary between building and material planning.
  *
- * Only straightforward one-item/one-block placement is counted automatically.
+ * Single-position item costs are shared with the placement action.
  * Unsupported multi-block, composite, and special states are reported rather
  * than producing a misleading resource request.
  */
@@ -60,18 +57,12 @@ public final class BuildingMaterialCalculator {
             if (task.action() == ConstructionTask.Action.REMOVE) continue;
 
             BlockState state = task.targetState();
-            Item item = state.getBlock().asItem();
-            if (state.isAir()
-                    || item == Items.AIR
-                    || !(item instanceof BlockItem blockItem)
-                    || blockItem.getBlock() != state.getBlock()
-                    || requiresSpecialPlacement(state)) {
+            ItemStack cost = BlockPlacementRules.costFor(state).orElse(null);
+            if (cost == null) {
                 unsupported.add(task);
                 continue;
             }
-
-            // PLACE and REPLACE both require the target's new material.
-            items.merge(item, 1, Integer::sum);
+            items.merge(cost.getItem(), cost.getCount(), Integer::sum);
         }
 
         return new Result(items, unsupported,
@@ -79,20 +70,5 @@ public final class BuildingMaterialCalculator {
                 construction.uncheckedBlockEntities());
     }
 
-    private static boolean requiresSpecialPlacement(BlockState state) {
-        // A door/bed occupies more than one block per item. Double slabs and
-        // stacked snow also cannot be obtained by a single placement.
-        if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                || state.hasProperty(BlockStateProperties.BED_PART)
-                || state.hasProperty(BlockStateProperties.LAYERS)) {
-            return true;
-        }
-        if (state.hasProperty(BlockStateProperties.SLAB_TYPE)
-                && state.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.DOUBLE) {
-            return true;
-        }
-        // A waterlogged block needs more than just the block item.
-        return state.hasProperty(BlockStateProperties.WATERLOGGED)
-                && state.getValue(BlockStateProperties.WATERLOGGED);
-    }
 }
+

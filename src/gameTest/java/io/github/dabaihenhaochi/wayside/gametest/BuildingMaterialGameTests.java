@@ -57,8 +57,7 @@ public final class BuildingMaterialGameTests {
                 new ConstructionTask(new BlockPos(1, 1, 1),
                         Blocks.OAK_DOOR.defaultBlockState(), ConstructionTask.Action.PLACE),
                 new ConstructionTask(new BlockPos(2, 1, 1),
-                        Blocks.OAK_SLAB.defaultBlockState().setValue(
-                                BlockStateProperties.SLAB_TYPE, SlabType.DOUBLE),
+                        Blocks.RED_BED.defaultBlockState(),
                         ConstructionTask.Action.PLACE),
                 new ConstructionTask(new BlockPos(3, 1, 1),
                         Blocks.OAK_STAIRS.defaultBlockState().setValue(
@@ -70,7 +69,7 @@ public final class BuildingMaterialGameTests {
         var result = BuildingMaterialCalculator.calculate(construction);
         helper.assertTrue(!result.canSupply(), "Special placements require separate handling");
         helper.assertTrue(result.unsupported().size() == 3,
-                "Door, double slab and waterlogged stair must be reported");
+                "Door, bed and waterlogged stair must be reported");
         helper.assertTrue(result.requiredItems().size() == 1
                         && result.requiredItems().get(Items.OAK_PLANKS) == 1,
                 "Valid blocks are still reported separately");
@@ -146,4 +145,37 @@ public final class BuildingMaterialGameTests {
             helper.assertTrue(stairs >= 4, "NPC should have at least four stairs to build with");
         });
     }
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void countsGenericBlocksAndCompositeCosts(GameTestHelper helper) {
+        var result = BuildingMaterialCalculator.calculate(new ConstructionPlanner.Plan(List.of(
+                new ConstructionTask(new BlockPos(1, 1, 1),
+                        Blocks.GLASS.defaultBlockState(), ConstructionTask.Action.PLACE),
+                new ConstructionTask(new BlockPos(2, 1, 1),
+                        Blocks.STONE_BRICKS.defaultBlockState(), ConstructionTask.Action.PLACE),
+                new ConstructionTask(new BlockPos(3, 1, 1),
+                        Blocks.OAK_FENCE.defaultBlockState(), ConstructionTask.Action.PLACE),
+                new ConstructionTask(new BlockPos(4, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
+                new ConstructionTask(new BlockPos(5, 1, 1),
+                        Blocks.OAK_SLAB.defaultBlockState().setValue(
+                                BlockStateProperties.SLAB_TYPE, SlabType.DOUBLE),
+                        ConstructionTask.Action.PLACE),
+                new ConstructionTask(new BlockPos(6, 1, 1),
+                        Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3),
+                        ConstructionTask.Action.PLACE)
+        ), 0, 0));
+        helper.assertTrue(result.canSupply(), "Ordinary single-position blocks should be countable");
+        helper.assertTrue(result.requiredItems().getOrDefault(Items.GLASS, 0) == 1,
+                "Glass should not require an explicit whitelist entry");
+        helper.assertTrue(result.requiredItems().getOrDefault(Items.STONE_BRICKS, 0) == 1
+                        && result.requiredItems().getOrDefault(Items.OAK_FENCE, 0) == 1
+                        && result.requiredItems().getOrDefault(Items.OAK_STAIRS, 0) == 1,
+                "Brick, fence and stair costs should be included");
+        helper.assertTrue(result.requiredItems().getOrDefault(Items.OAK_SLAB, 0) == 2,
+                "A double slab costs two slab items");
+        helper.assertTrue(result.requiredItems().getOrDefault(Items.SNOW, 0) == 3,
+                "Three snow layers cost three snow items");
+        helper.succeed();
+    }
 }
+

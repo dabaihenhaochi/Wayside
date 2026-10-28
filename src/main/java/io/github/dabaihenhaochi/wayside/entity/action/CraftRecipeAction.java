@@ -1,6 +1,7 @@
 package io.github.dabaihenhaochi.wayside.entity.action;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlan;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.SimpleContainer;
@@ -55,7 +56,7 @@ public final class CraftRecipeAction implements NpcAction {
         }
 
         SimpleContainer original = npc.getInventory();
-        SimpleContainer simulated = copyInventory(original);
+        SimpleContainer simulated = InventoryOps.copy(original);
         List<ItemStack> inputs = new ArrayList<>(step.ingredients().size());
 
         for (Item required : step.ingredients()) {
@@ -106,15 +107,6 @@ public final class CraftRecipeAction implements NpcAction {
             if (!stack.isEmpty() && stack.is(required)) return i;
         }
         return -1;
-    }
-
-    // 复制物品堆，避免模拟扣料时影响真实背包。
-    private static SimpleContainer copyInventory(SimpleContainer inventory) {
-        SimpleContainer copy = new SimpleContainer(inventory.getContainerSize());
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            copy.setItem(i, inventory.getItem(i).copy());
-        }
-        return copy;
     }
 
     // 超出 2×2 的配方暂以附近存在已加载的工作台为条件。

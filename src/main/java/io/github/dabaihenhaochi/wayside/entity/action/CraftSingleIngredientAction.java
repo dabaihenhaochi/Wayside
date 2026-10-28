@@ -1,6 +1,7 @@
 package io.github.dabaihenhaochi.wayside.entity.action;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -63,10 +64,7 @@ public final class CraftSingleIngredientAction implements NpcAction {
             }
 
             // 先模拟扣料和装入产物，避免背包满时损失原料。
-            SimpleContainer simulated = new SimpleContainer(inventory.getContainerSize());
-            for (int j = 0; j < inventory.getContainerSize(); j++) {
-                simulated.setItem(j, inventory.getItem(j).copy());
-            }
+            SimpleContainer simulated = InventoryOps.copy(inventory);
             simulated.removeItem(i, 1);
             if (!simulated.addItem(product.copy()).isEmpty()) {
                 return ActionResult.failed(ActionResult.Failure.NO_SPACE);
