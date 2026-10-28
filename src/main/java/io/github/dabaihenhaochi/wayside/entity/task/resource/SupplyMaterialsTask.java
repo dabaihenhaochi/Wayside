@@ -1,8 +1,12 @@
-package io.github.dabaihenhaochi.wayside.entity.task;
+package io.github.dabaihenhaochi.wayside.entity.task.resource;
+
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import io.github.dabaihenhaochi.wayside.entity.action.CraftRecipeAction;
+import io.github.dabaihenhaochi.wayside.entity.action.MoveToAction;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlan;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlanner;
 import net.minecraft.core.BlockPos;
@@ -33,6 +37,7 @@ public final class SupplyMaterialsTask implements NpcTask {
     private CraftRecipeAction craftAction;
     private GatherResourceTask gathering;
     private int gatherTarget;
+    private MoveToAction workstationMove;
 
     // 供存档工厂创建，随后加载保存的需求。
     public SupplyMaterialsTask() {
@@ -63,6 +68,7 @@ public final class SupplyMaterialsTask implements NpcTask {
     @Override public String typeId() { return ID; }
 
     @Override public String stageName() {
+        if (workstationMove != null) return "MOVING_TO_WORKSTATION";
         if (gathering != null) return "GATHERING";
         if (craftAction != null) return "CRAFTING";
         return "PLANNING";
@@ -124,6 +130,23 @@ public final class SupplyMaterialsTask implements NpcTask {
         }
 
         if (craftStepIndex < plan.craftSteps().size()) {
+            var step = plan.craftSteps().get(craftStepIndex);
+            if ((step.width() > 2 || step.height() > 2) && !CraftRecipeAction.hasWorkstation(npc)) {
+                if (workstationMove == null) {
+                    BlockPos table = BlockPos.findClosestMatch(npc.blockPosition(), 8, 3,
+                            pos -> level.hasChunkAt(pos) && level.getBlockState(pos).is(Blocks.CRAFTING_TABLE)).orElse(null);
+                    if (table == null) return ActionResult.failed(ActionResult.Failure.MISSING_WORKSTATION);
+                    var stand = NpcBlockInteraction.findWorkPosition(npc, table);
+                    if (stand.isEmpty()) return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
+                    workstationMove = new MoveToAction(stand.get(), 1.0, CraftRecipeAction::hasWorkstation);
+                }
+                ActionResult moved = workstationMove.tick(npc);
+                if (!moved.isSuccess()) return moved;
+            }
+            if (workstationMove != null) {
+                workstationMove.stop(npc);
+                workstationMove = null;
+            }
             if (craftAction == null) {
                 craftAction = new CraftRecipeAction(plan.craftSteps().get(craftStepIndex));
             }
@@ -157,6 +180,10 @@ public final class SupplyMaterialsTask implements NpcTask {
 
     @Override
     public void pause(NpcEntity npc) {
+        if (workstationMove != null) {
+            workstationMove.stop(npc);
+            workstationMove = null;
+        }
         if (gathering != null) {
             gathering.pause(npc);
         }
@@ -174,19 +201,8 @@ public final class SupplyMaterialsTask implements NpcTask {
     }
 
     @Override public BlockPos activeMoveTarget() {
+        if (workstationMove != null) return workstationMove.targetPosition();
         return gathering == null ? null : gathering.activeMoveTarget();
-    }
-
-    @Override public void abandonWorkTarget(NpcEntity npc) {
-        if (gathering != null) gathering.abandonWorkTarget(npc);
-    }
-
-    @Override public boolean isBlockOnCooldown(BlockPos pos, long now) {
-        return gathering != null && gathering.isBlockOnCooldown(pos, now);
-    }
-
-    @Override public void markBlockFailed(BlockPos pos, long now) {
-        if (gathering != null) gathering.markBlockFailed(pos, now);
     }
 
     // 只保存最终物品需求，临时采集和合成计划不写入存档。
@@ -225,6 +241,7 @@ public final class SupplyMaterialsTask implements NpcTask {
         gathering = null;
         gatherTarget = 0;
         craftAction = null;
+        workstationMove = null;
         craftStepIndex = 0;
     }
 }

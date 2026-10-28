@@ -14,9 +14,6 @@ public interface NpcTask {
 
     default BlockPos activeBlockTarget() { return null; }
     default BlockPos activeMoveTarget() { return null; }
-    default void abandonWorkTarget(NpcEntity npc) {}
-    default boolean isBlockOnCooldown(BlockPos pos, long now) { return false; }
-    default void markBlockFailed(BlockPos pos, long now) {}
     default CompoundTag save() { return new CompoundTag(); }
     default void load(CompoundTag tag) {}
 }

@@ -1,4 +1,4 @@
-package io.github.dabaihenhaochi.wayside.entity.task;
+package io.github.dabaihenhaochi.wayside.entity.task.resource;
 
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;

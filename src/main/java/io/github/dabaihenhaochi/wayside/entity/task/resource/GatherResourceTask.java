@@ -1,4 +1,7 @@
-package io.github.dabaihenhaochi.wayside.entity.task;
+package io.github.dabaihenhaochi.wayside.entity.task.resource;
+
+import io.github.dabaihenhaochi.wayside.entity.task.FailureMemory;
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
@@ -169,18 +172,12 @@ public final class GatherResourceTask implements NpcTask {
     }
 
     @Override public void pause(NpcEntity npc) { clearAction(npc); }
-    @Override public void abandonWorkTarget(NpcEntity npc) {
-        if (blockTarget != null) clearAction(npc);
-    }
     @Override public BlockPos activeBlockTarget() { return blockTarget; }
     @Override public BlockPos activeMoveTarget() {
         return step == Step.MOVE_TO_BLOCK && action instanceof MoveToAction move
                 ? move.targetPosition() : null;
     }
-    @Override public boolean isBlockOnCooldown(BlockPos pos, long now) {
+    public boolean isBlockOnCooldown(BlockPos pos, long now) {
         return failedBlocks.isCoolingDown(pos, now);
-    }
-    @Override public void markBlockFailed(BlockPos pos, long now) {
-        failedBlocks.mark(pos.immutable(), now, FAILED_BLOCK_TICKS);
     }
 }

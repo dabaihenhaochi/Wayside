@@ -6,7 +6,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Objects;
 
-public record ConstructionTask(
+public record ConstructionOperation(
         BlockPos pos,
         BlockState targetState,
         Action action
@@ -17,7 +17,7 @@ public record ConstructionTask(
         REPLACE
     }
 
-    public ConstructionTask {
+    public ConstructionOperation {
         Objects.requireNonNull(pos);
         Objects.requireNonNull(targetState);
         Objects.requireNonNull(action);

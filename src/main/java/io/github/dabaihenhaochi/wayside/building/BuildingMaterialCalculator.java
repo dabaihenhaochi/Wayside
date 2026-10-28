@@ -26,7 +26,7 @@ public final class BuildingMaterialCalculator {
 
     public record Result(
             Map<Item, Integer> requiredItems,
-            List<ConstructionTask> unsupported,
+            List<ConstructionOperation> unsupported,
             int unavailablePositions,
             int uncheckedBlockEntities
     ) {
@@ -49,12 +49,12 @@ public final class BuildingMaterialCalculator {
     public static Result calculate(ConstructionPlanner.Plan construction) {
         Objects.requireNonNull(construction);
         Map<Item, Integer> items = new LinkedHashMap<>();
-        List<ConstructionTask> unsupported = new ArrayList<>();
+        List<ConstructionOperation> unsupported = new ArrayList<>();
 
-        for (ConstructionTask task : construction.tasks()) {
+        for (ConstructionOperation task : construction.tasks()) {
             // Removing an old block does not require a new item; its drops are
             // deliberately not counted as material we already own.
-            if (task.action() == ConstructionTask.Action.REMOVE) continue;
+            if (task.action() == ConstructionOperation.Action.REMOVE) continue;
 
             BlockState state = task.targetState();
             ItemStack cost = BlockPlacementRules.costFor(state).orElse(null);

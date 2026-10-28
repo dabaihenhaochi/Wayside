@@ -1,3 +1,10 @@
+# Wayside
+
+Minecraft NeoForge 1.21.1 NPC 模组。v0.0.8 中新 NPC 创建时自带固定初始物资，默认建造任务随后自动读取结构蓝图、选址、用泥土平整场地，再逐格建造小屋，无需玩家交互。
+
+- [v0.0.8 使用说明与功能范围](docs/v0.0.8.md)
+- [代码结构与阅读顺序](docs/code-structure.md)
+- [v0.0.7 更新记录](docs/v0.0.7.md)
 
 Installation information
 =======

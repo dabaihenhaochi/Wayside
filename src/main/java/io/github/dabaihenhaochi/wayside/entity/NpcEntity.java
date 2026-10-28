@@ -1,44 +1,37 @@
 package io.github.dabaihenhaochi.wayside.entity;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.network.chat.Component;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
-import io.github.dabaihenhaochi.wayside.building.BuildingBlueprint;
-import io.github.dabaihenhaochi.wayside.building.BuildingInstance;
-import io.github.dabaihenhaochi.wayside.building.ConstructionPlanner;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.Rotation;
-import java.util.UUID;
+import io.github.dabaihenhaochi.wayside.entity.inventory.NpcInitialSupplies;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskExecutionGoal;
+import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
 
-// 连接任务运行器、背包和玩家交互。
+// 连接任务运行器与背包；初始物资属于实体创建，读档时以保存的背包为准。
 public class NpcEntity extends PathfinderMob {
     //创建任务运行器
-    private final NpcTaskRunner taskRunner = new NpcTaskRunner(this);
+    private final NpcTaskRunner taskRunner = new NpcTaskRunner(this, BuildHutTask::new);
     public NpcTaskRunner getTaskRunner() { return taskRunner; }
 
     //创建背包
-    private final SimpleContainer inventory = new SimpleContainer(9);
+    private static final int INVENTORY_SIZE = 9;
+    private final SimpleContainer inventory;
     public NpcEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
+        inventory = level.isClientSide ? new SimpleContainer(INVENTORY_SIZE)
+                : NpcInitialSupplies.createInventory(INVENTORY_SIZE);
     }
 
     //npc属性：最大生命值，移动速度，目标追踪范围
@@ -55,66 +48,6 @@ public class NpcEntity extends PathfinderMob {
         this.goalSelector.addGoal(0, new NpcTaskExecutionGoal(this));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
-    }
-
-    // 服务端响应玩家交互：临时移动到玩家位置，并展示测试建筑的施工差异。
-    @Override
-    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (!this.level().isClientSide) {
-            this.taskRunner.temporarilyMoveTo(player.blockPosition());
-
-            player.sendSystemMessage(Component.literal(
-                    "任务阶段：" + this.taskRunner.description()
-                            + "，原木：" + this.getLogCount()
-                            + "，木板：" + this.getPlankCount()
-            ));
-
-            if (this.level() instanceof ServerLevel serverLevel) {
-
-                ResourceLocation blueprintId =
-                        ResourceLocation.fromNamespaceAndPath(
-                                "wayside", "test_house"
-                        );
-
-                BuildingBlueprint.load(serverLevel, blueprintId)
-                        .ifPresentOrElse(blueprint -> {
-
-                            BuildingInstance testBuilding = new BuildingInstance(
-                                    UUID.randomUUID(),
-                                    blueprintId,
-                                    player.blockPosition().offset(3, 0, 3),
-                                    Rotation.NONE
-                            );
-
-                            var plan = ConstructionPlanner.createPlan(
-                                    serverLevel,
-                                    blueprint,
-                                    testBuilding,
-                                    ConstructionPlanner.AirPolicy.IGNORE
-                            );
-
-                            player.sendSystemMessage(Component.literal(
-                                    "待施工：" + plan.tasks().size()
-                                            + "，不可读取：" + plan.unavailablePositions()
-                                            + "，未核验方块实体：" + plan.uncheckedBlockEntities()
-                            ));
-
-                            plan.tasks().stream().limit(5).forEach(task ->
-                                    player.sendSystemMessage(Component.literal(
-                                            task.action()
-                                                    + " " + task.pos()
-                                                    + " -> " + task.targetState()
-                                    ))
-                            );
-
-                        }, () -> player.sendSystemMessage(
-                                Component.literal("找不到建筑蓝图")
-                        ));
-            }
-
-        }
-
-        return InteractionResult.sidedSuccess(this.level().isClientSide);
     }
 
     public SimpleContainer getInventory() {
@@ -159,9 +92,10 @@ public class NpcEntity extends PathfinderMob {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
 
-        this.inventory.clearContent();
-
+        // /summon 的初始 NBT 可能没有背包字段，此时保留构造时的默认物资。
+        // 存档有背包字段时完整替换，包括空背包，绝不按缺口补发。
         if (tag.contains("WaysideInventory", Tag.TAG_COMPOUND)) {
+            this.inventory.clearContent();
             ContainerHelper.loadAllItems(
                     tag.getCompound("WaysideInventory"),
                     this.inventory.getItems(),

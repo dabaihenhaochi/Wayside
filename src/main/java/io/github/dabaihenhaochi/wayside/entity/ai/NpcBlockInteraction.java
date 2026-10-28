@@ -11,11 +11,15 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.FallingBlock;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 // 查找可站立、可寻路且能实际操作目标方块的位置。
 public final class NpcBlockInteraction {
@@ -28,6 +32,21 @@ public final class NpcBlockInteraction {
     private NpcBlockInteraction() {
     }
 
+    // 纯条件检查：规划和实际放置都使用同一套支撑规则，不触发放置事件。
+    public static boolean hasPlacementSupport(Level level, BlockPos pos, BlockState state) {
+        return level.isInWorldBounds(pos) && level.hasChunkAt(pos)
+                && state.canSurvive(level, pos)
+                && (!(state.getBlock() instanceof FallingBlock)
+                || !FallingBlock.isFree(level.getBlockState(pos.below())));
+    }
+
+    // 施工清障的基础规则；事件权限仍由实际破坏动作在执行时检查。
+    public static boolean canDemolish(Level level, BlockPos pos, BlockState state) {
+        return level.isInWorldBounds(pos) && level.hasChunkAt(pos)
+                && !state.isAir() && state.getFluidState().isEmpty()
+                && state.getDestroySpeed(level, pos) >= 0;
+    }
+
     // 从假定站位检查支撑、操作距离和射线是否直接命中目标。
     public static boolean canWorkAt(NpcEntity npc, BlockPos target, Vec3 feet) {
         Level level = npc.level();
@@ -36,26 +55,57 @@ public final class NpcBlockInteraction {
         }
 
         Vec3 eye = eyePositionAt(npc, feet);
-        Vec3 surface = nearestSurfacePoint(target, eye);
-        if (eye.distanceToSqr(surface) > REACH * REACH) {
-            return false;
+        if (!level.hasChunksAt(BlockPos.containing(eye), target)) return false;
+        // 破坏按实际外形检查，台阶、玻璃板等也能选到有效操作表面。
+        for (AABB box : level.getBlockState(target).getShape(level, target).toAabbs()) {
+            AABB worldBox = box.move(target);
+            Vec3 surface = new Vec3(
+                    Mth.clamp(eye.x, worldBox.minX + SURFACE_INSET, worldBox.maxX - SURFACE_INSET),
+                    Mth.clamp(eye.y, worldBox.minY + SURFACE_INSET, worldBox.maxY - SURFACE_INSET),
+                    Mth.clamp(eye.z, worldBox.minZ + SURFACE_INSET, worldBox.maxZ - SURFACE_INSET));
+            if (eye.distanceToSqr(surface) > REACH * REACH) continue;
+            BlockHitResult hit = level.clip(new ClipContext(
+                    eye, surface, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, npc));
+            if (hit.getType() == HitResult.Type.BLOCK && target.equals(hit.getBlockPos())) return true;
         }
+        return false;
+    }
 
-        BlockHitResult hit = level.clip(new ClipContext(
-                eye, surface, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, npc
-        ));
-        return hit.getType() == HitResult.Type.BLOCK && target.equals(hit.getBlockPos());
+    // 放置目标是空气：视线应无遮挡，且新方块不能与假定站位的身体相交。
+    public static boolean canPlaceAt(NpcEntity npc, BlockPos target, BlockState state, Vec3 feet) {
+        Level level = npc.level();
+        if (!level.hasChunkAt(target) || !level.getBlockState(target).isAir()
+                || !hasStandingSpace(npc, target, feet)) return false;
+        AABB body = npc.getDimensions(npc.getPose()).makeBoundingBox(feet);
+        for (AABB box : state.getCollisionShape(level, target, CollisionContext.of(npc)).toAabbs()) {
+            if (box.move(target).intersects(body)) return false;
+        }
+        Vec3 eye = eyePositionAt(npc, feet);
+        if (!level.hasChunksAt(BlockPos.containing(eye), target)) return false;
+        Vec3 surface = nearestSurfacePoint(target, eye);
+        return eye.distanceToSqr(surface) <= REACH * REACH
+                && level.clip(new ClipContext(eye, surface, ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS;
+    }
+
+    public static Optional<BlockPos> findPlacementPosition(
+            NpcEntity npc, BlockPos target, BlockState state) {
+        return findPosition(npc, target, feet -> canPlaceAt(npc, target, state, feet));
     }
 
     // 筛选附近站位，优先操作余量和距离，并限制寻路尝试次数。
     public static Optional<BlockPos> findWorkPosition(NpcEntity npc, BlockPos target) {
+        return findPosition(npc, target, feet -> canWorkAt(npc, target, feet));
+    }
+
+    private static Optional<BlockPos> findPosition(NpcEntity npc, BlockPos target, Predicate<Vec3> usable) {
         List<BlockPos> candidates = new ArrayList<>();
         // 候选是 NPC 脚底的格子，不是待采集的方块。
         for (BlockPos candidate : BlockPos.betweenClosed(
                 target.offset(-HORIZONTAL_WORK_RANGE, -4, -HORIZONTAL_WORK_RANGE),
                 target.offset(HORIZONTAL_WORK_RANGE, 2, HORIZONTAL_WORK_RANGE)
         )) {
-            if (canWorkAt(npc, target, Vec3.atBottomCenterOf(candidate))) {
+            if (usable.test(Vec3.atBottomCenterOf(candidate))) {
                 candidates.add(candidate.immutable());
             }
         }

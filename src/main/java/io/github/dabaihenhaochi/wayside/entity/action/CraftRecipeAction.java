@@ -110,7 +110,7 @@ public final class CraftRecipeAction implements NpcAction {
     }
 
     // 超出 2×2 的配方暂以附近存在已加载的工作台为条件。
-    private static boolean hasWorkstation(NpcEntity npc) {
+    public static boolean hasWorkstation(NpcEntity npc) {
         BlockPos center = npc.blockPosition();
         for (int x = -WORKBENCH_RANGE; x <= WORKBENCH_RANGE; x++) {
             for (int y = -2; y <= 2; y++) {

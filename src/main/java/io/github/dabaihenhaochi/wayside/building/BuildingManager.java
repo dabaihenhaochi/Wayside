@@ -23,6 +23,12 @@ public class BuildingManager {
             BlockPos origin,
             Rotation rotation
     ) {
+        return tryRegister(blueprint, origin, rotation, null);
+    }
+
+    /** 整地时一起预留地基空间，避免不同高度的建筑互相挖掉基础。 */
+    public Optional<BuildingInstance> tryRegister(BuildingBlueprint blueprint, BlockPos origin,
+                                                  Rotation rotation, BoundingBox reservation) {
         BuildingInstance candidate = new BuildingInstance(
                 UUID.randomUUID(),
                 blueprint.getId(),
@@ -32,16 +38,23 @@ public class BuildingManager {
 
         BoundingBox candidateBox =
                 candidate.getBoundingBox(blueprint);
-
-        for (BuildingSavedData.Entry existing : data.getEntries()) {
-            if (existing.bounds().intersects(candidateBox)) {
-                return Optional.empty();
+        if (reservation != null) {
+            if (!reservation.isInside(new BlockPos(candidateBox.minX(), candidateBox.minY(), candidateBox.minZ()))
+                    || !reservation.isInside(new BlockPos(candidateBox.maxX(), candidateBox.maxY(), candidateBox.maxZ()))) {
+                throw new IllegalArgumentException("Reservation does not contain building");
             }
+            candidateBox = reservation;
         }
+
+        if (!isAreaAvailable(candidateBox)) return Optional.empty();
 
         data.add(candidate, candidateBox);
 
         return Optional.of(candidate);
+    }
+
+    public boolean isAreaAvailable(BoundingBox bounds) {
+        return data.getEntries().stream().noneMatch(existing -> existing.bounds().intersects(bounds));
     }
 
     public boolean remove(UUID id) {

@@ -3,10 +3,10 @@ package io.github.dabaihenhaochi.wayside.gametest;
 import io.github.dabaihenhaochi.wayside.Wayside;
 import io.github.dabaihenhaochi.wayside.building.BuildingMaterialCalculator;
 import io.github.dabaihenhaochi.wayside.building.ConstructionPlanner;
-import io.github.dabaihenhaochi.wayside.building.ConstructionTask;
+import io.github.dabaihenhaochi.wayside.building.ConstructionOperation;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
-import io.github.dabaihenhaochi.wayside.entity.task.SupplyMaterialsTask;
+import io.github.dabaihenhaochi.wayside.entity.task.resource.SupplyMaterialsTask;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlan;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlanner;
 import io.github.dabaihenhaochi.wayside.registry.ModEntities;
@@ -33,14 +33,14 @@ public final class BuildingMaterialGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void countsOnlyPendingPlaceAndReplace(GameTestHelper helper) {
         ConstructionPlanner.Plan construction = new ConstructionPlanner.Plan(List.of(
-                new ConstructionTask(new BlockPos(1, 1, 1),
-                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(2, 1, 1),
-                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(3, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.REPLACE),
-                new ConstructionTask(new BlockPos(4, 1, 1),
-                        Blocks.AIR.defaultBlockState(), ConstructionTask.Action.REMOVE)
+                new ConstructionOperation(new BlockPos(1, 1, 1),
+                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(2, 1, 1),
+                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(3, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.REPLACE),
+                new ConstructionOperation(new BlockPos(4, 1, 1),
+                        Blocks.AIR.defaultBlockState(), ConstructionOperation.Action.REMOVE)
         ), 0, 0);
         var result = BuildingMaterialCalculator.calculate(construction);
         helper.assertTrue(result.canSupply(), "Ordinary one-block placements are supported");
@@ -54,17 +54,17 @@ public final class BuildingMaterialGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void refusesUnsupportedBlockStates(GameTestHelper helper) {
         ConstructionPlanner.Plan construction = new ConstructionPlanner.Plan(List.of(
-                new ConstructionTask(new BlockPos(1, 1, 1),
-                        Blocks.OAK_DOOR.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(2, 1, 1),
+                new ConstructionOperation(new BlockPos(1, 1, 1),
+                        Blocks.OAK_DOOR.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(2, 1, 1),
                         Blocks.RED_BED.defaultBlockState(),
-                        ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(3, 1, 1),
+                        ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(3, 1, 1),
                         Blocks.OAK_STAIRS.defaultBlockState().setValue(
                                 BlockStateProperties.WATERLOGGED, true),
-                        ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(4, 1, 1),
-                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionTask.Action.PLACE)
+                        ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(4, 1, 1),
+                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionOperation.Action.PLACE)
         ), 0, 0);
         var result = BuildingMaterialCalculator.calculate(construction);
         helper.assertTrue(!result.canSupply(), "Special placements require separate handling");
@@ -90,14 +90,14 @@ public final class BuildingMaterialGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void passesConstructionItemsToRecipePlanner(GameTestHelper helper) {
         ConstructionPlanner.Plan construction = new ConstructionPlanner.Plan(List.of(
-                new ConstructionTask(new BlockPos(1, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(2, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(3, 1, 1),
-                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(4, 1, 1),
-                        Blocks.OAK_LOG.defaultBlockState(), ConstructionTask.Action.PLACE)
+                new ConstructionOperation(new BlockPos(1, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(2, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(3, 1, 1),
+                        Blocks.OAK_PLANKS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(4, 1, 1),
+                        Blocks.OAK_LOG.defaultBlockState(), ConstructionOperation.Action.PLACE)
         ), 0, 0);
         var counted = BuildingMaterialCalculator.calculate(construction);
         helper.assertTrue(counted.canSupply(), "Supported construction can request materials");
@@ -118,17 +118,18 @@ public final class BuildingMaterialGameTests {
         }
         helper.setBlock(3, 1, 5, Blocks.CRAFTING_TABLE);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_LOG, 3));
 
         var construction = new ConstructionPlanner.Plan(List.of(
-                new ConstructionTask(new BlockPos(1, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(2, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(3, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(4, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE)
+                new ConstructionOperation(new BlockPos(1, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(2, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(3, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(4, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE)
         ), 0, 0);
         var materials = BuildingMaterialCalculator.calculate(construction);
         helper.assertTrue(materials.canSupply(), "Building should have countable materials");
@@ -148,21 +149,21 @@ public final class BuildingMaterialGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void countsGenericBlocksAndCompositeCosts(GameTestHelper helper) {
         var result = BuildingMaterialCalculator.calculate(new ConstructionPlanner.Plan(List.of(
-                new ConstructionTask(new BlockPos(1, 1, 1),
-                        Blocks.GLASS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(2, 1, 1),
-                        Blocks.STONE_BRICKS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(3, 1, 1),
-                        Blocks.OAK_FENCE.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(4, 1, 1),
-                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(5, 1, 1),
+                new ConstructionOperation(new BlockPos(1, 1, 1),
+                        Blocks.GLASS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(2, 1, 1),
+                        Blocks.STONE_BRICKS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(3, 1, 1),
+                        Blocks.OAK_FENCE.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(4, 1, 1),
+                        Blocks.OAK_STAIRS.defaultBlockState(), ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(5, 1, 1),
                         Blocks.OAK_SLAB.defaultBlockState().setValue(
                                 BlockStateProperties.SLAB_TYPE, SlabType.DOUBLE),
-                        ConstructionTask.Action.PLACE),
-                new ConstructionTask(new BlockPos(6, 1, 1),
+                        ConstructionOperation.Action.PLACE),
+                new ConstructionOperation(new BlockPos(6, 1, 1),
                         Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3),
-                        ConstructionTask.Action.PLACE)
+                        ConstructionOperation.Action.PLACE)
         ), 0, 0));
         helper.assertTrue(result.canSupply(), "Ordinary single-position blocks should be countable");
         helper.assertTrue(result.requiredItems().getOrDefault(Items.GLASS, 0) == 1,

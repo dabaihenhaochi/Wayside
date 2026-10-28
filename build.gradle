@@ -37,9 +37,22 @@ base {
 // Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// 开发用行为测试与发布代码分开，测试不进入模组 JAR。
+sourceSets {
+    gameTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    gameTestImplementation.extendsFrom implementation
+    gameTestRuntimeOnly.extendsFrom runtimeOnly
+}
+
 neoForge {
     // Specify the version of NeoForge to use.
     version = project.neo_version
+    addModdingDependenciesTo sourceSets.gameTest
 
     parchment {
         mappingsVersion = project.parchment_mappings_version
@@ -69,6 +82,7 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
+            gameDirectory = project.file('build/gametest')
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -103,6 +117,7 @@ neoForge {
         // multi mod projects should define one per mod
         "${mod_id}" {
             sourceSet(sourceSets.main)
+            sourceSet(sourceSets.gameTest)
         }
     }
 }
@@ -180,6 +195,8 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
+
+tasks.named('check') { dependsOn tasks.named('compileGameTestJava') }
 
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.
 idea {

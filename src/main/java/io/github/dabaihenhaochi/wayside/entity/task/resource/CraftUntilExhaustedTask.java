@@ -1,4 +1,6 @@
-package io.github.dabaihenhaochi.wayside.entity.task;
+package io.github.dabaihenhaochi.wayside.entity.task.resource;
+
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;

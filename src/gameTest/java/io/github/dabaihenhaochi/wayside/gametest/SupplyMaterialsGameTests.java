@@ -4,7 +4,7 @@ import io.github.dabaihenhaochi.wayside.Wayside;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
-import io.github.dabaihenhaochi.wayside.entity.task.SupplyMaterialsTask;
+import io.github.dabaihenhaochi.wayside.entity.task.resource.SupplyMaterialsTask;
 import io.github.dabaihenhaochi.wayside.registry.ModEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -26,6 +26,7 @@ public final class SupplyMaterialsGameTests {
     public static void stockedGoalRequiresNoProduction(GameTestHelper helper) {
         prepareFloor(helper);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_STAIRS, 8));
         npc.getInventory().setItem(1, new ItemStack(Items.OAK_LOG, 3));
         npc.getTaskRunner().setTask(new SupplyMaterialsTask(Map.of(Items.OAK_STAIRS, 8)));
@@ -44,6 +45,7 @@ public final class SupplyMaterialsGameTests {
         prepareFloor(helper);
         helper.setBlock(3, 1, 5, Blocks.CRAFTING_TABLE);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_LOG, 3));
         npc.getTaskRunner().setTask(new SupplyMaterialsTask(Map.of(Items.OAK_STAIRS, 8)));
 
@@ -66,6 +68,7 @@ public final class SupplyMaterialsGameTests {
         helper.setBlock(second, Blocks.OAK_LOG);
 
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_LOG, 1));
         npc.getTaskRunner().setTask(new SupplyMaterialsTask(Map.of(Items.OAK_STAIRS, 8)));
 
@@ -82,6 +85,7 @@ public final class SupplyMaterialsGameTests {
     public static void missingWorkstationFailsWithoutSpendingMaterials(GameTestHelper helper) {
         prepareFloor(helper);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_PLANKS, 6));
         NpcTaskRunner runner = npc.getTaskRunner();
         runner.setTask(new SupplyMaterialsTask(Map.of(Items.OAK_STAIRS, 4)));
@@ -107,6 +111,7 @@ public final class SupplyMaterialsGameTests {
     public static void unavailableResourceFailsInsteadOfInventingIt(GameTestHelper helper) {
         prepareFloor(helper);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         NpcTaskRunner runner = npc.getTaskRunner();
         runner.setTask(new SupplyMaterialsTask(Map.of(Items.STONE, 3)));
         runner.tick();
@@ -124,6 +129,7 @@ public final class SupplyMaterialsGameTests {
         prepareFloor(helper);
         helper.setBlock(3, 1, 5, Blocks.CRAFTING_TABLE);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.OAK_LOG, 3));
         NpcTaskRunner runner = npc.getTaskRunner();
         runner.setTask(new SupplyMaterialsTask(Map.of(Items.OAK_STAIRS, 8)));

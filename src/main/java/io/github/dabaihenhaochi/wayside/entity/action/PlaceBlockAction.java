@@ -2,21 +2,17 @@ package io.github.dabaihenhaochi.wayside.entity.action;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import io.github.dabaihenhaochi.wayside.building.BlockPlacementRules;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.common.util.BlockSnapshot;
 import net.neoforged.neoforge.event.EventHooks;
@@ -25,7 +21,6 @@ import java.util.Objects;
 
 /** 单格放置动作：材料规则与建筑材料计算器共享。移动由上层任务负责。 */
 public final class PlaceBlockAction implements NpcAction {
-    private static final double REACH = 2.5;
     private final BlockPos pos;
     private final BlockState targetState;
 
@@ -60,12 +55,10 @@ public final class PlaceBlockAction implements NpcAction {
         if (level.captureBlockSnapshots || !EventHooks.canEntityGrief(level, npc)) {
             return ActionResult.failed(ActionResult.Failure.FORBIDDEN);
         }
-        if (!canReach(npc, level)) {
+        if (!NpcBlockInteraction.canPlaceAt(npc, pos, targetState, npc.position())) {
             return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
         }
-        if (!targetState.canSurvive(level, pos)
-                || (targetState.getBlock() instanceof FallingBlock
-                && FallingBlock.isFree(level.getBlockState(pos.below())))
+        if (!NpcBlockInteraction.hasPlacementSupport(level, pos, targetState)
                 || !level.isUnobstructed(targetState, pos, CollisionContext.empty())) {
             return ActionResult.failed(ActionResult.Failure.NO_SPACE);
         }
@@ -116,20 +109,4 @@ public final class PlaceBlockAction implements NpcAction {
         return ActionResult.success();
     }
 
-    private boolean canReach(NpcEntity npc, ServerLevel level) {
-        Vec3 eye = npc.getEyePosition();
-        // 取靠近 NPC 的目标表面，距离按眼睛到表面计算。
-        Vec3 aim = new Vec3(
-                Mth.clamp(eye.x, pos.getX() + 0.001, pos.getX() + 0.999),
-                Mth.clamp(eye.y, pos.getY() + 0.001, pos.getY() + 0.999),
-                Mth.clamp(eye.z, pos.getZ() + 0.001, pos.getZ() + 0.999));
-        if (eye.distanceToSqr(aim) > REACH * REACH
-                || !level.hasChunksAt(BlockPos.containing(eye), pos)) {
-            return false;
-        }
-        // 目标是空气：视线无遮挡时应为 MISS，而不是命中目标方块。
-        return level.clip(new ClipContext(eye, aim, ClipContext.Block.COLLIDER,
-                ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS;
-    }
 }
-

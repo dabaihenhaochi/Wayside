@@ -1,4 +1,6 @@
-package io.github.dabaihenhaochi.wayside.entity.task;
+package io.github.dabaihenhaochi.wayside.entity.task.resource;
+
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
@@ -116,15 +118,6 @@ public final class EnsurePlanksTask implements NpcTask {
     }
     @Override public net.minecraft.core.BlockPos activeMoveTarget() {
         return gathering == null ? null : gathering.activeMoveTarget();
-    }
-    @Override public boolean isBlockOnCooldown(net.minecraft.core.BlockPos pos, long now) {
-        return gathering != null && gathering.isBlockOnCooldown(pos, now);
-    }
-    @Override public void markBlockFailed(net.minecraft.core.BlockPos pos, long now) {
-        if (gathering != null) gathering.markBlockFailed(pos, now);
-    }
-    @Override public void abandonWorkTarget(NpcEntity npc) {
-        if (gathering != null) gathering.abandonWorkTarget(npc);
     }
 
     @Override public CompoundTag save() {

@@ -3,6 +3,8 @@ package io.github.dabaihenhaochi.wayside.gametest;
 import io.github.dabaihenhaochi.wayside.Wayside;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
+import io.github.dabaihenhaochi.wayside.entity.task.resource.GatherResourceTask;
 import io.github.dabaihenhaochi.wayside.registry.ModEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -25,13 +27,13 @@ public class NpcHarvestGameTests {
     public static void waitsThenDropsExactlyOneLog(GameTestHelper helper) {
         prepareFloor(helper);
         helper.setBlock(LOG, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(30, () -> helper.assertBlockPresent(Blocks.OAK_LOG, LOG));
         helper.runAtTickTime(80, () -> {
             helper.assertBlockPresent(Blocks.AIR, LOG);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, LOG, 5.0, 1);
-            helper.assertTrue(!npc.hasBlockTarget() && !npc.hasMoveTarget(), "Completed targets must be cleared");
+            assertTotalLogs(helper, LOG, 5.0, 1);
+            helper.assertTrue(!(npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "Completed targets must be cleared");
             helper.succeed();
         });
     }
@@ -41,11 +43,11 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos distantLog = new BlockPos(8, 1, 5);
         helper.setBlock(distantLog, Blocks.OAK_LOG);
-        helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 5));
+        spawnHarvester(helper, new BlockPos(2, 1, 5));
 
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, distantLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, distantLog, 5.0, 1);
+            assertTotalLogs(helper, distantLog, 5.0, 1);
         });
     }
 
@@ -53,15 +55,15 @@ public class NpcHarvestGameTests {
     public static void removedTargetProducesNoDrop(GameTestHelper helper) {
         prepareFloor(helper);
         helper.setBlock(LOG, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(20, () -> {
-            helper.assertTrue(npc.hasBlockTarget() && !npc.hasMoveTarget(), "NPC must have started working before target removal");
+            helper.assertTrue((npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "NPC must have started working before target removal");
             helper.setBlock(LOG, Blocks.AIR);
         });
         helper.runAtTickTime(80, () -> {
             helper.assertItemEntityNotPresent(Items.OAK_LOG);
-            helper.assertTrue(!npc.hasBlockTarget() && !npc.hasMoveTarget(), "Removed target must be abandoned");
+            helper.assertTrue(!(npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "Removed target must be abandoned");
             helper.succeed();
         });
     }
@@ -72,16 +74,17 @@ public class NpcHarvestGameTests {
         helper.setBlock(LOG, Blocks.OAK_LOG);
         helper.setBlock(4, 1, 5, Blocks.IRON_BARS);
         helper.setBlock(4, 2, 5, Blocks.IRON_BARS);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new Vec3(4.1, 1.0, 5.5));
+        GatherResourceTask gathering = logGatherer();
+        NpcEntity npc = spawnHarvester(helper, new Vec3(4.1, 1.0, 5.5), gathering);
         npc.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.0);
 
         // 目标在操作距离内，但细栏杆挡住了实际操作视线。
-        helper.assertTrue(!npc.canReachBlock(helper.absolutePos(LOG)), "Wall must block the interaction ray");
+        helper.assertTrue(!NpcBlockInteraction.canWorkAt(npc, helper.absolutePos(LOG), npc.position()), "Wall must block the interaction ray");
         helper.runAtTickTime(660, () -> {
             helper.assertBlockPresent(Blocks.OAK_LOG, LOG);
             helper.assertItemEntityNotPresent(Items.OAK_LOG);
-            helper.assertTrue(npc.isBlockTargetOnCooldown(helper.absolutePos(LOG)), "Unreachable target must cool down");
-            helper.assertTrue(!npc.hasBlockTarget() && !npc.hasMoveTarget(), "Timed-out targets must be cleared");
+            helper.assertTrue(gathering.isBlockOnCooldown(helper.absolutePos(LOG), helper.getLevel().getGameTime()), "Unreachable target must cool down");
+            helper.assertTrue(!(npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "Timed-out targets must be cleared");
             helper.succeed();
         });
     }
@@ -90,18 +93,20 @@ public class NpcHarvestGameTests {
     public static void newObstructionInterruptsWork(GameTestHelper helper) {
         prepareFloor(helper);
         helper.setBlock(LOG, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new Vec3(4.1, 1.0, 5.5));
+        GatherResourceTask gathering = logGatherer();
+        NpcEntity npc = spawnHarvester(helper, new Vec3(4.1, 1.0, 5.5), gathering);
         npc.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.0);
 
         helper.runAtTickTime(20, () -> {
-            helper.assertTrue(npc.hasBlockTarget() && !npc.hasMoveTarget(), "NPC must be working before obstruction");
+            helper.assertTrue((npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "NPC must be working before obstruction");
             helper.setBlock(4, 1, 5, Blocks.IRON_BARS);
             helper.setBlock(4, 2, 5, Blocks.IRON_BARS);
         });
         helper.runAtTickTime(80, () -> {
             helper.assertBlockPresent(Blocks.OAK_LOG, LOG);
             helper.assertItemEntityNotPresent(Items.OAK_LOG);
-            helper.assertTrue(npc.hasMoveTarget() || npc.isBlockTargetOnCooldown(helper.absolutePos(LOG)),
+            helper.assertTrue((npc.getTaskRunner().activeMoveTarget() != null)
+                            || gathering.isBlockOnCooldown(helper.absolutePos(LOG), helper.getLevel().getGameTime()),
                     "Interrupted work must replan movement or abandon an unreachable target");
             helper.succeed();
         });
@@ -111,12 +116,12 @@ public class NpcHarvestGameTests {
     public static void manualMoveCancelsHarvest(GameTestHelper helper) {
         prepareFloor(helper);
         helper.setBlock(LOG, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(20, () -> {
-            helper.assertTrue(npc.hasBlockTarget() && !npc.hasMoveTarget(), "NPC must be working before the manual command");
-            npc.clearBlockTarget();
-            npc.setMoveTarget(helper.absolutePos(new BlockPos(1, 1, 1)));
+            helper.assertTrue((npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "NPC must be working before the manual command");
+
+            npc.getTaskRunner().temporarilyMoveTo(helper.absolutePos(new BlockPos(1, 1, 1)));
         });
         helper.runAtTickTime(45, () -> {
             helper.assertBlockPresent(Blocks.OAK_LOG, LOG);
@@ -131,12 +136,12 @@ public class NpcHarvestGameTests {
         BlockPos secondLog = LOG.east(2);
         helper.setBlock(LOG, Blocks.OAK_LOG);
         helper.setBlock(secondLog, Blocks.OAK_LOG);
-        helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, LOG);
             helper.assertBlockPresent(Blocks.AIR, secondLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, LOG, 6.0, 2);
+            assertTotalLogs(helper, LOG, 6.0, 2);
         });
     }
 
@@ -145,11 +150,11 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos overheadLog = LOG.above(2);
         helper.setBlock(overheadLog, Blocks.OAK_LOG);
-        helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(80, () -> {
             helper.assertBlockPresent(Blocks.AIR, overheadLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, overheadLog, 5.0, 1);
+            assertTotalLogs(helper, overheadLog, 5.0, 1);
             helper.succeed();
         });
     }
@@ -159,25 +164,25 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos elevatedLog = new BlockPos(8, 3, 5);
         helper.setBlock(elevatedLog, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(2, 1, 5));
         boolean[] sawSeparateWorkPosition = {false};
 
         helper.runAtTickTime(120, () -> Wayside.LOGGER.debug(
                 "Elevated-log test: npc={}, movement={}, resource={}, onGround={}, pathDone={}, canWork={}",
-                npc.position(), npc.getMoveTarget(), npc.getBlockTarget(), npc.onGround(),
-                npc.getNavigation().isDone(), npc.canReachBlock(helper.absolutePos(elevatedLog))));
+                npc.position(), npc.getTaskRunner().activeMoveTarget(), npc.getTaskRunner().activeBlockTarget(), npc.onGround(),
+                npc.getNavigation().isDone(), NpcBlockInteraction.canWorkAt(npc, helper.absolutePos(elevatedLog), npc.position())));
         helper.onEachTick(() -> {
-            if (npc.hasMoveTarget() && npc.hasBlockTarget()) {
-                helper.assertTrue(!npc.getMoveTarget().equals(npc.getBlockTarget()),
+            if ((npc.getTaskRunner().activeMoveTarget() != null) && (npc.getTaskRunner().activeBlockTarget() != null)) {
+                helper.assertTrue(!npc.getTaskRunner().activeMoveTarget().equals(npc.getTaskRunner().activeBlockTarget()),
                         "Movement must target a standing position, not the elevated resource");
-                helper.assertTrue(npc.getMoveTarget().getY() == helper.absolutePos(new BlockPos(0, 1, 0)).getY(),
+                helper.assertTrue(npc.getTaskRunner().activeMoveTarget().getY() == helper.absolutePos(new BlockPos(0, 1, 0)).getY(),
                         "Work position must stay on the ground");
                 sawSeparateWorkPosition[0] = true;
             }
         });
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, elevatedLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, elevatedLog, 5.0, 1);
+            assertTotalLogs(helper, elevatedLog, 5.0, 1);
             helper.assertTrue(sawSeparateWorkPosition[0], "NPC must first walk to a distinct work position");
         });
     }
@@ -187,11 +192,11 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos lowerLog = LOG.below();
         helper.setBlock(lowerLog, Blocks.OAK_LOG);
-        helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(80, () -> {
             helper.assertBlockPresent(Blocks.AIR, lowerLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, lowerLog, 5.0, 1);
+            assertTotalLogs(helper, lowerLog, 5.0, 1);
             helper.succeed();
         });
     }
@@ -201,16 +206,16 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos lowerLog = LOG.below();
         helper.setBlock(lowerLog, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), LOG);
+        NpcEntity npc = spawnHarvester(helper, LOG);
         double floorY = npc.getY();
-        helper.assertTrue(!npc.canReachBlock(helper.absolutePos(lowerLog)),
+        helper.assertTrue(!NpcBlockInteraction.canWorkAt(npc, helper.absolutePos(lowerLog), npc.position()),
                 "NPC must not harvest its current support block");
 
         helper.onEachTick(() -> helper.assertTrue(npc.getY() >= floorY - 0.05,
                 "NPC must not fall through its harvested support block"));
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, lowerLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, lowerLog, 5.0, 1);
+            assertTotalLogs(helper, lowerLog, 5.0, 1);
             helper.assertTrue(!npc.blockPosition().below().equals(helper.absolutePos(lowerLog)),
                     "NPC must move aside before harvesting its support");
         });
@@ -223,7 +228,7 @@ public class NpcHarvestGameTests {
         helper.setBlock(elevatedLog, Blocks.OAK_LOG);
         helper.setBlock(4, 0, 5, Blocks.AIR);
         helper.setBlock(6, 2, 5, Blocks.STONE);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(2, 1, 5));
 
         helper.assertTrue(!NpcBlockInteraction.canWorkAt(npc, helper.absolutePos(elevatedLog),
                 helper.absoluteVec(new Vec3(4.5, 1.0, 5.5))), "Unsupported work position must be rejected");
@@ -234,7 +239,7 @@ public class NpcHarvestGameTests {
                 "NPC must use a supported route and work position"));
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, elevatedLog);
-            helper.assertItemEntityCountIs(Items.OAK_LOG, elevatedLog, 5.0, 1);
+            assertTotalLogs(helper, elevatedLog, 5.0, 1);
         });
     }
 
@@ -252,14 +257,15 @@ public class NpcHarvestGameTests {
                 }
             }
         }
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 5));
+        GatherResourceTask gathering = logGatherer();
+        NpcEntity npc = spawnHarvester(helper, Vec3.atBottomCenterOf(new BlockPos(2, 1, 5)), gathering);
 
         helper.runAtTickTime(80, () -> {
             helper.assertBlockPresent(Blocks.OAK_LOG, enclosedLog);
             helper.assertItemEntityNotPresent(Items.OAK_LOG);
-            helper.assertTrue(npc.isBlockTargetOnCooldown(helper.absolutePos(enclosedLog)),
+            helper.assertTrue(gathering.isBlockOnCooldown(helper.absolutePos(enclosedLog), helper.getLevel().getGameTime()),
                     "A resource with no reachable standing position must cool down");
-            helper.assertTrue(!npc.hasBlockTarget() && !npc.hasMoveTarget(),
+            helper.assertTrue(!(npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null),
                     "Unreachable work positions must not leave stale movement targets");
             helper.succeed();
         });
@@ -270,15 +276,15 @@ public class NpcHarvestGameTests {
         prepareFloor(helper);
         BlockPos elevatedLog = new BlockPos(8, 3, 5);
         helper.setBlock(elevatedLog, Blocks.OAK_LOG);
-        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 5));
+        NpcEntity npc = spawnHarvester(helper, new BlockPos(2, 1, 5));
 
         helper.runAtTickTime(10, () -> {
-            helper.assertTrue(npc.hasMoveTarget() && npc.hasBlockTarget(), "NPC must still be approaching");
-            helper.assertTrue(!npc.getMoveTarget().equals(npc.getBlockTarget()), "Work position must differ from resource");
+            helper.assertTrue((npc.getTaskRunner().activeMoveTarget() != null) && (npc.getTaskRunner().activeBlockTarget() != null), "NPC must still be approaching");
+            helper.assertTrue(!npc.getTaskRunner().activeMoveTarget().equals(npc.getTaskRunner().activeBlockTarget()), "Work position must differ from resource");
             helper.setBlock(elevatedLog, Blocks.AIR);
         });
         helper.runAtTickTime(30, () -> {
-            helper.assertTrue(!npc.hasBlockTarget() && !npc.hasMoveTarget(),
+            helper.assertTrue(!(npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null),
                     "Removing a resource must also clear its distinct work position");
             helper.assertItemEntityNotPresent(Items.OAK_LOG);
             helper.succeed();
@@ -293,7 +299,7 @@ public class NpcHarvestGameTests {
         GameRules.BooleanValue rule = helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING);
         boolean originalValue = rule.get();
         rule.set(false, helper.getLevel().getServer());
-        helper.spawn(ModEntities.NPC.get(), new BlockPos(4, 1, 5));
+        spawnHarvester(helper, new BlockPos(4, 1, 5));
 
         helper.runAtTickTime(80, () -> {
             rule.set(originalValue, helper.getLevel().getServer());
@@ -309,5 +315,35 @@ public class NpcHarvestGameTests {
                 helper.setBlock(x, 0, z, Blocks.STONE);
             }
         }
+    }
+    // v0.0.7 后会主动拾取，采集结果应同时统计地上掉落物和 NPC 背包。
+    private static void assertTotalLogs(GameTestHelper helper, BlockPos center, double radius, int expected) {
+        var area = new net.minecraft.world.phys.AABB(helper.absolutePos(center)).inflate(radius);
+        int count = helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, area)
+                .stream().filter(entity -> entity.getItem().is(Items.OAK_LOG))
+                .mapToInt(entity -> entity.getItem().getCount()).sum();
+        count += helper.getLevel().getEntitiesOfClass(NpcEntity.class, area).stream()
+                .mapToInt(NpcEntity::getLogCount).sum();
+        helper.assertTrue(count == expected, "Expected " + expected + " harvested logs, found " + count);
+    }
+    // 默认目标已改为自动建屋；采集回归测试显式选择采集任务。
+    private static NpcEntity spawnHarvester(GameTestHelper helper, BlockPos pos) {
+        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), pos);
+        npc.getInventory().clearContent();
+        npc.getTaskRunner().setTask(new io.github.dabaihenhaochi.wayside.entity.task.resource.GatherAndCraftPlanksTask());
+        return npc;
+    }
+    private static NpcEntity spawnHarvester(GameTestHelper helper, Vec3 pos) {
+        return spawnHarvester(helper, pos, new io.github.dabaihenhaochi.wayside.entity.task.resource.GatherAndCraftPlanksTask());
+    }
+    private static NpcEntity spawnHarvester(GameTestHelper helper, Vec3 pos, NpcTask task) {
+        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), pos);
+        npc.getInventory().clearContent();
+        npc.getTaskRunner().setTask(task);
+        return npc;
+    }
+    private static GatherResourceTask logGatherer() {
+        return new GatherResourceTask(state -> state.is(net.minecraft.tags.BlockTags.LOGS),
+                stack -> stack.is(net.minecraft.tags.ItemTags.LOGS), NpcEntity::getLogCount, 16);
     }
 }

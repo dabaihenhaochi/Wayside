@@ -4,6 +4,7 @@ package io.github.dabaihenhaochi.wayside.building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 
@@ -21,7 +22,7 @@ public final class ConstructionPlanner {
     }
 
     public record Plan(
-            List<ConstructionTask> tasks,
+            List<ConstructionOperation> tasks,
             int unavailablePositions,
             int uncheckedBlockEntities
     ) {
@@ -42,11 +43,17 @@ public final class ConstructionPlanner {
             BuildingInstance building,
             AirPolicy airPolicy
     ) {
+        return createPlan(level, blueprint, building, airPolicy, level::getBlockState);
+    }
+
+    /** 可用预期现场做预算，例如整地后的建筑区域将是空气；不会提前修改世界。 */
+    public static Plan createPlan(ServerLevel level, BuildingBlueprint blueprint, BuildingInstance building,
+                                  AirPolicy airPolicy, java.util.function.Function<BlockPos, BlockState> observedState) {
         if (!blueprint.getId().equals(building.blueprintId())) {
             throw new IllegalArgumentException("Blueprint ID mismatch");
         }
 
-        List<ConstructionTask> tasks = new ArrayList<>();
+        List<ConstructionOperation> tasks = new ArrayList<>();
         int unavailable = 0;
         int uncheckedBlockEntities = 0;
 
@@ -82,28 +89,32 @@ public final class ConstructionPlanner {
                     building.rotation()
             );
 
-            BlockState currentState = level.getBlockState(worldPos);
+            BlockState currentState = observedState.apply(worldPos);
 
             // 方块实体的数据暂时不参与完成判定。
             if (info.nbt() != null) {
                 uncheckedBlockEntities++;
             }
 
-            if (currentState.equals(targetState)) {
+            // 栅栏连接、楼梯内外角等由现场邻居决定，不能把施工中的暂态
+            // 当作还要拆掉重建的方块，也不能重复计入材料需求。
+            if (currentState.equals(targetState)
+                    || (currentState.getBlock() == targetState.getBlock()
+                    && currentState.equals(Block.updateFromNeighbourShapes(targetState, level, worldPos)))) {
                 continue;
             }
 
-            ConstructionTask.Action action;
+            ConstructionOperation.Action action;
 
             if (targetState.isAir()) {
-                action = ConstructionTask.Action.REMOVE;
+                action = ConstructionOperation.Action.REMOVE;
             } else if (currentState.isAir()) {
-                action = ConstructionTask.Action.PLACE;
+                action = ConstructionOperation.Action.PLACE;
             } else {
-                action = ConstructionTask.Action.REPLACE;
+                action = ConstructionOperation.Action.REPLACE;
             }
 
-            tasks.add(new ConstructionTask(
+            tasks.add(new ConstructionOperation(
                     worldPos,
                     targetState,
                     action

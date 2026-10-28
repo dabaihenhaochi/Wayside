@@ -3,6 +3,7 @@ package io.github.dabaihenhaochi.wayside.entity.action;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -84,6 +85,16 @@ public final class MoveToAction implements NpcAction {
             nextRetryTime = now + RETRY_TICKS;
         }
 
+        // 导航可能在格子中心前约半个身位结束。对要求精确站位的调用者，
+        // 继续用正常移动控制走完最后一小段，避免身体仍占据待放置方块。
+        if (positionTarget != null && npc.getNavigation().isDone()) {
+            Vec3 feet = Vec3.atBottomCenterOf(positionTarget);
+            if (npc.position().distanceToSqr(feet) < 2.25
+                    && Math.abs(npc.getY() - feet.y) < 0.5
+                    && npc.level().noCollision(npc, npc.getDimensions(npc.getPose()).makeBoundingBox(feet))) {
+                npc.getMoveControl().setWantedPosition(feet.x, feet.y, feet.z, speed);
+            }
+        }
         return ActionResult.running();
     }
 

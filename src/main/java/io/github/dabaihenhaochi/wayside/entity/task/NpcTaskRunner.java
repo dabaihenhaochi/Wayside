@@ -8,6 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 
 // 管理正式任务及其状态；临时任务可打断执行，但不丢失原任务进度。
 public final class NpcTaskRunner {
@@ -16,14 +17,20 @@ public final class NpcTaskRunner {
     }
 
     private final NpcEntity npc;
+    private final Supplier<? extends NpcTask> defaultTaskFactory;
     private NpcTask task;
     private State state = State.RUNNING;
     private ActionResult lastResult = ActionResult.running();
     private NpcTask temporaryTask;
 
-    public NpcTaskRunner(NpcEntity npc) {
-        this.npc = npc;
-        this.task = new GatherAndCraftPlanksTask();
+    public NpcTaskRunner(NpcEntity npc, Supplier<? extends NpcTask> defaultTaskFactory) {
+        this.npc = Objects.requireNonNull(npc);
+        this.defaultTaskFactory = Objects.requireNonNull(defaultTaskFactory);
+        this.task = createDefaultTask();
+    }
+
+    private NpcTask createDefaultTask() {
+        return Objects.requireNonNull(defaultTaskFactory.get(), "Default task factory returned null");
     }
 
     // 清理旧动作并替换任务，从运行状态开始。
@@ -137,10 +144,6 @@ public final class NpcTaskRunner {
         return current == null ? null : current.activeBlockTarget();
     }
 
-    public boolean isBlockOnCooldown(BlockPos pos) {
-        return task.isBlockOnCooldown(pos, npc.level().getGameTime());
-    }
-
     public String description() {
         return task.typeId() + " / " + task.stageName() + " / " + state
                 + (state == State.FAILED ? " (" + lastResult.failure() + ")" : "");
@@ -162,13 +165,13 @@ public final class NpcTaskRunner {
         return result;
     }
 
-    // 按任务类型恢复进度和状态，兼容旧存档；未知类型退回默认采木任务。
+    // 按任务类型恢复；未知类型采用调用者指定的默认任务。
     public void load(CompoundTag entityTag) {
         cancelManualMove();
         if (state == State.RUNNING) {
             task.pause(npc);
         }
-        task = new GatherAndCraftPlanksTask();
+        task = createDefaultTask();
         state = State.RUNNING;
         lastResult = ActionResult.running();
 
@@ -205,14 +208,13 @@ public final class NpcTaskRunner {
                 }
                 return;
             }
-            Wayside.LOGGER.warn("[Wayside] Unknown NPC task {}, defaulting to wood task", id);
+            Wayside.LOGGER.warn("[Wayside] Unknown NPC task {}, using configured default task", id);
         }
 
-        // 兼容尚未引入运行器的 v0.0.6 阶段字段。
-        if (entityTag.contains("WaysideTaskStage", Tag.TAG_STRING)) {
-            CompoundTag legacy = new CompoundTag();
-            legacy.putString("Stage", entityTag.getString("WaysideTaskStage"));
-            task.load(legacy);
+        // 具体旧任务的转换交给类型登记处，运行器只恢复生命周期状态。
+        var legacy = NpcTaskTypes.restoreLegacy(entityTag);
+        if (legacy.isPresent()) {
+            task = legacy.get();
             if ("COMPLETED".equals(entityTag.getString("WaysideTaskStage"))) {
                 state = State.COMPLETED;
                 lastResult = ActionResult.success();

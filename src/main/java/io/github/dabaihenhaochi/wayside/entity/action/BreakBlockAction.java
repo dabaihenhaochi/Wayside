@@ -36,6 +36,9 @@ public final class BreakBlockAction implements NpcAction {
         }
 
         BlockState state = npc.level().getBlockState(pos);
+        if (state.getDestroySpeed(npc.level(), pos) < 0) {
+            return ActionResult.failed(ActionResult.Failure.FORBIDDEN);
+        }
         if (!allowedTarget.test(state)) {
             return ActionResult.failed(ActionResult.Failure.INVALID_TARGET);
         }

@@ -49,15 +49,6 @@ public class TaskSequence implements NpcTask {
     @Override public BlockPos activeMoveTarget() {
         return active() == null ? null : active().activeMoveTarget();
     }
-    @Override public void abandonWorkTarget(NpcEntity npc) {
-        if (active() != null) active().abandonWorkTarget(npc);
-    }
-    @Override public boolean isBlockOnCooldown(BlockPos pos, long now) {
-        return active() != null && active().isBlockOnCooldown(pos, now);
-    }
-    @Override public void markBlockFailed(BlockPos pos, long now) {
-        if (active() != null) active().markBlockFailed(pos, now);
-    }
 
     // 保存步骤索引及每个子任务的数据。
     @Override public CompoundTag save() {
@@ -69,16 +60,8 @@ public class TaskSequence implements NpcTask {
         return tag;
     }
 
-    // 恢复步骤并限制索引范围，兼容旧版阶段字符串。
+    // 恢复步骤并限制索引范围；具体业务的旧存档转换由对应任务处理。
     @Override public void load(CompoundTag tag) {
-        if (tag.contains("Stage", Tag.TAG_STRING)) {
-            current = switch (tag.getString("Stage")) {
-                case "CRAFTING" -> Math.min(1, steps.size());
-                case "COMPLETED" -> steps.size();
-                default -> 0;
-            };
-            return;
-        }
         current = Math.max(0, Math.min(steps.size(), tag.getInt("Current")));
         if (tag.contains("Steps", Tag.TAG_LIST)) {
             ListTag data = tag.getList("Steps", Tag.TAG_COMPOUND);
