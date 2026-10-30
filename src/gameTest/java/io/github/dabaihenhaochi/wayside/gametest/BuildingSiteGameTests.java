@@ -1,6 +1,7 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
+import io.github.dabaihenhaochi.wayside.entity.task.build.BuildBuildingTask;
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildStructureTask;
 import io.github.dabaihenhaochi.wayside.entity.task.build.PrepareBuildingSiteTask;
 
@@ -199,17 +200,17 @@ public final class BuildingSiteGameTests {
         helper.onEachTick(() -> {
             if (npc.getTaskRunner().state() == NpcTaskRunner.State.FAILED) {
                 var failed = npc.getTaskRunner().save().getCompound("Data");
-                var construction = failed.getCompound("Construction");
+                var construction = failed.getCompound("Project").getCompound("Building");
                 var building = new BuildingManager(helper.getLevel()).getBuildings().stream()
                         .filter(value -> value.id().equals(construction.getUUID("Building"))).findFirst().orElseThrow();
-                Wayside.LOGGER.error("Slope hut failed: npc={} site={} pending={}", npc.position(), failed.getCompound("Preparation"),
+                Wayside.LOGGER.error("Slope hut failed: npc={} site={} pending={}", npc.position(), failed.getCompound("Project").getCompound("Site"),
                         ConstructionPlanner.createPlan(helper.getLevel(), BuildingBlueprint.load(helper.getLevel(), building.blueprintId()).orElseThrow(),
                                 building, ConstructionPlanner.AirPolicy.CLEAR));
             }
             helper.assertTrue(npc.getTaskRunner().state() != NpcTaskRunner.State.FAILED,
                     "Automatic slope construction failed: " + npc.getTaskRunner().description());
             var data = npc.getTaskRunner().save().getCompound("Data");
-            if (data.contains("Preparation") && !data.getBoolean("Prepared")) {
+            if (data.getCompound("Project").contains("Site") && data.getInt("Current") < 3) {
                 helper.assertTrue(npc.getInventory().countItem(Items.OAK_LOG) == 16
                                 && npc.getInventory().countItem(Items.OAK_PLANKS) == 64
                                 && npc.getInventory().countItem(Items.OAK_STAIRS) == 64,
@@ -219,12 +220,12 @@ public final class BuildingSiteGameTests {
         helper.succeedWhen(() -> {
             helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED, "Automatic slope hut must finish");
             var data = npc.getTaskRunner().save().getCompound("Data");
-            var site = BuildingSitePlan.load(data.getCompound("Preparation"));
+            var site = BuildingSitePlan.load(data.getCompound("Project").getCompound("Site"));
             helper.assertTrue(!site.fill().isEmpty(), "This site must actually need dirt fill");
             helper.assertTrue(npc.getInventory().countItem(Items.DIRT) + site.fill().size() == 64,
                     "Foundation must consume the fixed initial dirt exactly once");
             var building = new BuildingManager(helper.getLevel()).getBuildings().stream()
-                    .filter(value -> value.id().equals(data.getCompound("Construction").getUUID("Building"))).findFirst().orElseThrow();
+                    .filter(value -> value.id().equals(data.getCompound("Project").getCompound("Building").getUUID("Building"))).findFirst().orElseThrow();
             helper.assertTrue(ConstructionPlanner.createPlan(helper.getLevel(),
                     BuildingBlueprint.load(helper.getLevel(), building.blueprintId()).orElseThrow(), building,
                     ConstructionPlanner.AirPolicy.CLEAR).isComplete(), "Completed house must match its blueprint");
@@ -232,13 +233,18 @@ public final class BuildingSiteGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 900)
-    public static void totalBudgetProtectsTerrainWhenHouseMaterialsAreMissing(GameTestHelper helper) {
+    public static void unavailableHouseMaterialsProtectTerrain(GameTestHelper helper) {
         NpcEntity npc = slope(helper, true);
         npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new ItemStack(Items.DIRT, 64));
         helper.setBlock(5, 3, 5, Blocks.STONE);
+        BuildingInstance building = blueprint(helper, "unavailable_house", new Vec3i(1, 1, 1));
+        helper.setBlock(1, 8, 1, Blocks.STONE);
+        helper.getLevel().getStructureManager().getOrCreate(building.blueprintId()).fillFromWorld(
+                helper.getLevel(), helper.absolutePos(new BlockPos(1, 8, 1)), new Vec3i(1, 1, 1), false, Blocks.STRUCTURE_VOID);
+        npc.getTaskRunner().setTask(new BuildBuildingTask(building.blueprintId(), Rotation.NONE, 8, 2, 2));
         helper.succeedWhen(() -> {
-            helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.FAILED, "Site search should report missing house stock");
+            helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.FAILED, "Unsupported material supply must fail before terrain work");
             helper.assertTrue(npc.getTaskRunner().lastResult().failure() == ActionResult.Failure.MISSING_INGREDIENT,
                     "Dirt alone must not authorize demolition without house materials");
             helper.assertBlockPresent(Blocks.STONE, new BlockPos(5, 3, 5));
@@ -259,14 +265,14 @@ public final class BuildingSiteGameTests {
             helper.assertTrue(npc.getTaskRunner().state() != NpcTaskRunner.State.FAILED,
                     "Uneven ground must not trap unfinished floor blocks: " + npc.getTaskRunner().description());
             var data = npc.getTaskRunner().save().getCompound("Data");
-            if (data.contains("Preparation") && !data.getBoolean("Prepared")) {
-                hadEarthwork[0] |= !BuildingSitePlan.load(data.getCompound("Preparation")).remaining(helper.getLevel()).isComplete();
+            if (data.getCompound("Project").contains("Site") && data.getInt("Current") < 3) {
+                hadEarthwork[0] |= !BuildingSitePlan.load(data.getCompound("Project").getCompound("Site")).remaining(helper.getLevel()).isComplete();
             }
         });
         helper.succeedWhen(() -> {
             helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED && hadEarthwork[0],
                     "The uneven site must be prepared and the whole hut completed");
-            var construction = npc.getTaskRunner().save().getCompound("Data").getCompound("Construction");
+            var construction = npc.getTaskRunner().save().getCompound("Data").getCompound("Project").getCompound("Building");
             var building = new BuildingManager(helper.getLevel()).getBuildings().stream()
                     .filter(value -> value.id().equals(construction.getUUID("Building"))).findFirst().orElseThrow();
             helper.assertTrue(ConstructionPlanner.createPlan(helper.getLevel(),
@@ -319,7 +325,7 @@ public final class BuildingSiteGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
-    public static void legacyHutSaveDoesNotClearAnAlreadyStartedHouse(GameTestHelper helper) {
+    public static void invalidHutSaveCannotClearAnExistingHouse(GameTestHelper helper) {
         NpcEntity npc = slope(helper, false);
         BuildingInstance building = blueprint(helper, "legacy", new Vec3i(1, 1, 1));
         helper.setBlock(ORIGIN, Blocks.OAK_PLANKS);
@@ -329,9 +335,9 @@ public final class BuildingSiteGameTests {
         task.load(legacy);
         npc.getTaskRunner().setTask(task);
         helper.succeedWhen(() -> {
-            helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED, "Old construction must resume directly");
+            helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.FAILED, "Unsupported task data must be rejected");
             helper.assertBlockPresent(Blocks.OAK_PLANKS, ORIGIN);
-            helper.assertTrue(npc.getInventory().isEmpty(), "Already completed legacy blocks must not cost new material");
+            helper.assertTrue(npc.getInventory().isEmpty(), "Rejecting invalid data must not spend material");
         });
     }
 }

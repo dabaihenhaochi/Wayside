@@ -10,6 +10,7 @@ import io.github.dabaihenhaochi.wayside.entity.action.CollectItemAction;
 import io.github.dabaihenhaochi.wayside.entity.action.MoveToAction;
 import io.github.dabaihenhaochi.wayside.entity.action.NpcAction;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -19,7 +20,6 @@ import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
 
 // 组合搜索、移动、破坏和拾取，直到调用方要求的库存数量达标。
 public final class GatherResourceTask implements NpcTask {
@@ -33,7 +33,6 @@ public final class GatherResourceTask implements NpcTask {
 
     private final Predicate<BlockState> blockFilter;
     private final Predicate<ItemStack> itemFilter;
-    private final ToIntFunction<NpcEntity> inventoryCount;
     private final int required;
     private final FailureMemory<BlockPos> failedBlocks = new FailureMemory<>();
     private final FailureMemory<UUID> failedItems = new FailureMemory<>();
@@ -47,12 +46,10 @@ public final class GatherResourceTask implements NpcTask {
     public GatherResourceTask(
             Predicate<BlockState> blockFilter,
             Predicate<ItemStack> itemFilter,
-            ToIntFunction<NpcEntity> inventoryCount,
             int required
     ) {
         this.blockFilter = Objects.requireNonNull(blockFilter);
         this.itemFilter = Objects.requireNonNull(itemFilter);
-        this.inventoryCount = Objects.requireNonNull(inventoryCount);
         if (required <= 0) throw new IllegalArgumentException("required must be positive");
         this.required = required;
     }
@@ -62,7 +59,8 @@ public final class GatherResourceTask implements NpcTask {
     // 推进当前动作，失败目标进入冷却；优先拾取掉落物，再寻找资源方块。
     @Override
     public ActionResult tick(NpcEntity npc) {
-        if (inventoryCount.applyAsInt(npc) >= required) {
+        // 拾取筛选与库存达标判断共用同一规则，调用方无需再提供计数回调。
+        if (InventoryOps.count(npc.getInventory(), itemFilter) >= required) {
             clearAction(npc);
             return ActionResult.success();
         }

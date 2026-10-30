@@ -38,15 +38,15 @@ public final class NpcTaskRunner {
         if (state == State.RUNNING && temporaryTask == null) {
             task.pause(npc);
         }
-        cancelManualMove();
+        cancelTemporaryTask();
         task = Objects.requireNonNull(next);
         state = State.RUNNING;
         lastResult = ActionResult.running();
     }
 
-    // 取消手动移动并暂停任务，保留任务进度。
+    // 取消临时任务并暂停正式任务，保留任务进度。
     public void pause() {
-        cancelManualMove();
+        cancelTemporaryTask();
         if (state == State.RUNNING) {
             task.pause(npc);
             state = State.PAUSED;
@@ -69,7 +69,7 @@ public final class NpcTaskRunner {
 
     // 清理当前动作，将未结束的任务标记为取消。
     public void cancel() {
-        cancelManualMove();
+        cancelTemporaryTask();
         if (state == State.RUNNING) {
             task.pause(npc);
         }
@@ -115,18 +115,18 @@ public final class NpcTaskRunner {
         state = result.isSuccess() ? State.COMPLETED : State.FAILED;
     }
 
-    // 用移动任务临时接管执行；只在首次打断时暂停原任务。
-    public void temporarilyMoveTo(BlockPos pos) {
-        Objects.requireNonNull(pos);
+    // 用任意任务临时接管执行；运行器不负责创建具体业务任务。
+    public void temporarilyRun(NpcTask temporary) {
+        Objects.requireNonNull(temporary);
         if (state == State.RUNNING && temporaryTask == null) {
             task.pause(npc);
         }
-        cancelManualMove();
-        temporaryTask = new VisitPositionTask(pos);
+        cancelTemporaryTask();
+        temporaryTask = temporary;
     }
 
     // 清除临时任务并停止其动作，不修改正式任务的状态和进度。
-    public void cancelManualMove() {
+    public void cancelTemporaryTask() {
         if (temporaryTask != null) {
             temporaryTask.pause(npc);
             temporaryTask = null;
@@ -158,16 +158,13 @@ public final class NpcTaskRunner {
         if (state == State.FAILED) {
             result.putString("LastFailure", lastResult.failure().name());
         }
-        // 保留旧版 Terminal 字段，供旧代码读取。
-        result.putBoolean("Terminal", state == State.COMPLETED
-                || state == State.FAILED || state == State.CANCELED);
-        // 手动移动属于临时指令，重载世界后不恢复。
+        // 临时任务不保存，重载世界后按正式任务的状态恢复。
         return result;
     }
 
     // 按任务类型恢复；未知类型采用调用者指定的默认任务。
     public void load(CompoundTag entityTag) {
-        cancelManualMove();
+        cancelTemporaryTask();
         if (state == State.RUNNING) {
             task.pause(npc);
         }
@@ -190,8 +187,6 @@ public final class NpcTaskRunner {
                     } catch (IllegalArgumentException exception) {
                         Wayside.LOGGER.warn("[Wayside] Invalid NPC task state: {}", saved.getString("State"));
                     }
-                } else if (saved.getBoolean("Terminal")) {
-                    state = State.COMPLETED;
                 }
                 if (state == State.FAILED) {
                     ActionResult.Failure failure = ActionResult.Failure.UNKNOWN;
@@ -209,16 +204,6 @@ public final class NpcTaskRunner {
                 return;
             }
             Wayside.LOGGER.warn("[Wayside] Unknown NPC task {}, using configured default task", id);
-        }
-
-        // 具体旧任务的转换交给类型登记处，运行器只恢复生命周期状态。
-        var legacy = NpcTaskTypes.restoreLegacy(entityTag);
-        if (legacy.isPresent()) {
-            task = legacy.get();
-            if ("COMPLETED".equals(entityTag.getString("WaysideTaskStage"))) {
-                state = State.COMPLETED;
-                lastResult = ActionResult.success();
-            }
         }
     }
 }

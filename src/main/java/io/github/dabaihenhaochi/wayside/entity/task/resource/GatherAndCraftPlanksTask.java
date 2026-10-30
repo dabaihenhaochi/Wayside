@@ -2,9 +2,6 @@ package io.github.dabaihenhaochi.wayside.entity.task.resource;
 
 import io.github.dabaihenhaochi.wayside.entity.task.TaskSequence;
 
-import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import java.util.List;
@@ -18,7 +15,6 @@ public final class GatherAndCraftPlanksTask extends TaskSequence {
                 new GatherResourceTask(
                         state -> state.is(BlockTags.LOGS),
                         item -> item.is(ItemTags.LOGS),
-                        NpcEntity::getLogCount,
                         16
                 ),
                 new CraftUntilExhaustedTask(
@@ -28,15 +24,4 @@ public final class GatherAndCraftPlanksTask extends TaskSequence {
         ));
     }
 
-    // v0.0.6 的业务阶段在本场景中转换，不让通用任务序列认识采集和合成。
-    @Override public void load(CompoundTag tag) {
-        if (!tag.contains("Stage", Tag.TAG_STRING)) { super.load(tag); return; }
-        CompoundTag migrated = new CompoundTag();
-        migrated.putInt("Current", switch (tag.getString("Stage")) {
-            case "CRAFTING" -> 1;
-            case "COMPLETED" -> 2;
-            default -> 0;
-        });
-        super.load(migrated);
-    }
 }

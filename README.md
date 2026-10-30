@@ -4,6 +4,7 @@ Minecraft NeoForge 1.21.1 NPC 模组。v0.0.8 中新 NPC 创建时自带固定�
 
 - [v0.0.8 使用说明与功能范围](docs/v0.0.8.md)
 - [代码结构与阅读顺序](docs/code-structure.md)
+- [垫脚与山边移动说明](docs/npc-access.md)
 - [v0.0.7 更新记录](docs/v0.0.7.md)
 
 Installation information

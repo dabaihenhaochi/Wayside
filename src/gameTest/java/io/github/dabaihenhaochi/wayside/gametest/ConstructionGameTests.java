@@ -4,6 +4,8 @@ import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildStructureTask;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.building.*;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.*;
@@ -181,11 +183,11 @@ public final class ConstructionGameTests {
         helper.runAtTickTime(40, () -> {
             CompoundTag saved = new CompoundTag();
             npc.addAdditionalSaveData(saved);
-            int logs = npc.getLogCount();
-            int planks = npc.getPlankCount();
+            int logs = InventoryOps.count(npc.getInventory(), ItemTags.LOGS);
+            int planks = InventoryOps.count(npc.getInventory(), ItemTags.PLANKS);
             int stairs = npc.getInventory().countItem(Items.OAK_STAIRS);
             npc.readAdditionalSaveData(saved);
-            helper.assertTrue(npc.getLogCount() == logs && npc.getPlankCount() == planks
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == logs && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == planks
                             && npc.getInventory().countItem(Items.OAK_STAIRS) == stairs,
                     "Entity reload must preserve exact remaining stock");
         });
@@ -199,10 +201,10 @@ public final class ConstructionGameTests {
             npc.getInventory().setItem(i, new ItemStack(Items.STONE, 64));
         }
         helper.succeedWhen(() -> {
-            helper.assertTrue(npc.getTaskRunner().lastResult().failure() == ActionResult.Failure.MISSING_INGREDIENT,
-                    "Building must report missing construction materials, not attempt another starter grant");
+            helper.assertTrue(npc.getTaskRunner().lastResult().failure() == ActionResult.Failure.NO_SPACE,
+                    "A full inventory must stop resource acquisition without granting starter supplies");
             helper.assertTrue(npc.getInventory().countItem(Items.STONE) == 576
-                            && npc.getLogCount() == 0 && npc.getPlankCount() == 0,
+                            && InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0,
                     "Building must leave a full inventory untouched");
         });
     }
@@ -217,7 +219,7 @@ public final class ConstructionGameTests {
                 "Automatic hut should complete: " + npc.getTaskRunner().description());
         CompoundTag saved = npc.getTaskRunner().save();
         helper.assertTrue(saved.getString("Type").equals(BuildHutTask.ID), "Default task must be the autonomous hut goal");
-        CompoundTag construction = saved.getCompound("Data").getCompound("Construction");
+        CompoundTag construction = saved.getCompound("Data").getCompound("Project").getCompound("Building");
         var building = new BuildingManager(helper.getLevel()).getBuildings().stream()
                 .filter(value -> value.id().equals(construction.getUUID("Building"))).findFirst().orElseThrow();
         var data = BuildingBlueprint.load(helper.getLevel(), building.blueprintId()).orElseThrow();
@@ -226,8 +228,8 @@ public final class ConstructionGameTests {
         var completeCost = BuildingMaterialCalculator.calculate(new ConstructionPlanner.Plan(
                 data.getBlocks().stream().filter(info -> !info.state().isAir()).map(info -> new ConstructionOperation(
                         building.toWorldPos(info.pos()), info.state(), ConstructionOperation.Action.PLACE)).toList(), 0, 0));
-        helper.assertTrue(npc.getLogCount() + completeCost.requiredItems().getOrDefault(Items.OAK_LOG, 0) == 16
-                        && npc.getPlankCount() + completeCost.requiredItems().getOrDefault(Items.OAK_PLANKS, 0) == 64
+        helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) + completeCost.requiredItems().getOrDefault(Items.OAK_LOG, 0) == 16
+                        && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) + completeCost.requiredItems().getOrDefault(Items.OAK_PLANKS, 0) == 64
                         && npc.getInventory().countItem(Items.OAK_STAIRS)
                         + completeCost.requiredItems().getOrDefault(Items.OAK_STAIRS, 0) == 64,
                 "Finished building must consume the finite initial stock exactly once");

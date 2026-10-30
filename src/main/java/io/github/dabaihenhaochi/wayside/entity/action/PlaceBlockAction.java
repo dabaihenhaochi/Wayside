@@ -18,15 +18,39 @@ import net.neoforged.neoforge.common.util.BlockSnapshot;
 import net.neoforged.neoforge.event.EventHooks;
 
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /** 单格放置动作：材料规则与建筑材料计算器共享。移动由上层任务负责。 */
 public final class PlaceBlockAction implements NpcAction {
+    private enum Mode { NORMAL, UNDERFOOT, CONSTRUCTION_FALLBACK }
     private final BlockPos pos;
     private final BlockState targetState;
+    private final Mode mode;
+    private final int reservedItems;
+    private final Predicate<BlockPos> placementAllowed;
 
     public PlaceBlockAction(BlockPos pos, BlockState targetState) {
+        this(pos, targetState, Mode.NORMAL, 0, target -> true);
+    }
+
+    private PlaceBlockAction(BlockPos pos, BlockState targetState, Mode mode, int reservedItems,
+                             Predicate<BlockPos> placementAllowed) {
+        if (reservedItems < 0) throw new IllegalArgumentException("Reserved material cannot be negative");
         this.pos = Objects.requireNonNull(pos).immutable();
         this.targetState = Objects.requireNonNull(targetState);
+        this.mode = mode;
+        this.reservedItems = reservedItems;
+        this.placementAllowed = Objects.requireNonNull(placementAllowed);
+    }
+
+    static PlaceBlockAction underfoot(BlockPos pos, BlockState state, int reservedItems,
+                                      Predicate<BlockPos> placementAllowed) {
+        return new PlaceBlockAction(pos, state, Mode.UNDERFOOT, reservedItems, placementAllowed);
+    }
+
+    /** 仅供建筑任务在正常站位/移动受阻后使用；不绕过材料、支撑、碰撞或放置事件。 */
+    public static PlaceBlockAction constructionFallback(BlockPos pos, BlockState state) {
+        return new PlaceBlockAction(pos, state, Mode.CONSTRUCTION_FALLBACK, 0, target -> true);
     }
 
     @Override
@@ -55,16 +79,27 @@ public final class PlaceBlockAction implements NpcAction {
         if (level.captureBlockSnapshots || !EventHooks.canEntityGrief(level, npc)) {
             return ActionResult.failed(ActionResult.Failure.FORBIDDEN);
         }
-        if (!NpcBlockInteraction.canPlaceAt(npc, pos, targetState, npc.position())) {
+        if (!placementAllowed.test(pos)) return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
+        boolean reachable = switch (mode) {
+            case NORMAL -> NpcBlockInteraction.canPlaceAt(npc, pos, targetState, npc.position());
+            case UNDERFOOT -> NpcBlockInteraction.canPlaceUnderfoot(npc, pos, targetState);
+            case CONSTRUCTION_FALLBACK -> true;
+        };
+        if (!reachable) {
             return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
         }
         if (!NpcBlockInteraction.hasPlacementSupport(level, pos, targetState)
                 || !level.isUnobstructed(targetState, pos, CollisionContext.empty())) {
             return ActionResult.failed(ActionResult.Failure.NO_SPACE);
         }
+        // 隔空只放宽距离和视线，不能把方块放进施工者身体。
+        if (mode == Mode.CONSTRUCTION_FALLBACK && targetState.getCollisionShape(level, pos).toAabbs().stream()
+                .anyMatch(box -> box.move(pos).intersects(npc.getBoundingBox()))) {
+            return ActionResult.failed(ActionResult.Failure.NO_SPACE);
+        }
 
         Item material = cost.getItem();
-        if (InventoryOps.count(npc.getInventory(), material) < cost.getCount()) {
+        if (!hasMaterials(npc, cost)) {
             return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
         }
         if (!level.getBlockState(pos).equals(originalState)) {
@@ -87,7 +122,9 @@ public final class PlaceBlockAction implements NpcAction {
             if (!level.getBlockState(pos).equals(targetState)) {
                 return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
             }
-            if (!InventoryOps.consumeExact(npc.getInventory(), material, cost.getCount())) {
+            // 事件回调可能改变建筑预留或背包；在最终提交点再次检查。
+            if (!placementAllowed.test(pos)) return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
+            if (!hasMaterials(npc, cost) || !InventoryOps.consumeExact(npc.getInventory(), material, cost.getCount())) {
                 return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
             }
             committed = true;
@@ -107,6 +144,10 @@ public final class PlaceBlockAction implements NpcAction {
         level.gameEvent(GameEvent.BLOCK_PLACE, pos,
                 GameEvent.Context.of(npc, targetState));
         return ActionResult.success();
+    }
+
+    private boolean hasMaterials(NpcEntity npc, ItemStack cost) {
+        return InventoryOps.count(npc.getInventory(), cost.getItem()) >= (long) cost.getCount() + reservedItems;
     }
 
 }

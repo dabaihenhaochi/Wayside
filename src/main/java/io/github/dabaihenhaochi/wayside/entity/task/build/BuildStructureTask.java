@@ -12,7 +12,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.Rotation;
 
 import java.util.Objects;
 
@@ -30,7 +29,7 @@ public final class BuildStructureTask implements NpcTask {
     public BuildStructureTask(BuildingInstance building, ConstructionPlanner.AirPolicy policy) {
         this.building = Objects.requireNonNull(building);
         this.airPolicy = Objects.requireNonNull(policy);
-        executor = new ConstructionExecutor(false, building.origin().getY());
+        executor = new ConstructionExecutor(false);
     }
     @Override public String typeId() { return ID; }
     @Override public String stageName() { return executor.stageName(); }
@@ -46,35 +45,27 @@ public final class BuildStructureTask implements NpcTask {
             catch (IllegalArgumentException e) { return ActionResult.failed(ActionResult.Failure.INVALID_TARGET); }
             if (blueprint == null) return ActionResult.failed(ActionResult.Failure.INVALID_TARGET);
         }
-        return executor.tick(npc, () -> ConstructionPlanner.createPlan(level, blueprint, building, airPolicy));
+        return executor.tick(npc, () -> ConstructionPlanner.createPlan(level, blueprint, building, airPolicy),
+                pos -> !building.getBoundingBox(blueprint).isInside(pos));
     }
     @Override public void pause(NpcEntity npc) { executor.pause(npc); }
 
     @Override public CompoundTag save() {
-        CompoundTag tag = new CompoundTag();
-        if (building != null) {
-            tag.putUUID("Building", building.id());
-            tag.putString("Blueprint", building.blueprintId().toString());
-            tag.putIntArray("Origin", new int[]{building.origin().getX(), building.origin().getY(), building.origin().getZ()});
-            tag.putString("Rotation", building.rotation().name());
-        }
+        CompoundTag tag = building == null ? new CompoundTag() : building.save();
         if (dimension != null) tag.putString("Dimension", dimension.toString());
         tag.putString("AirPolicy", airPolicy.name());
+        tag.put("Execution", executor.save());
         return tag;
     }
     @Override public void load(CompoundTag tag) {
         building = null;
         blueprint = null;
         dimension = tag.contains("Dimension", Tag.TAG_STRING) ? ResourceLocation.tryParse(tag.getString("Dimension")) : null;
-        int[] origin = tag.getIntArray("Origin");
-        ResourceLocation id = ResourceLocation.tryParse(tag.getString("Blueprint"));
         try {
-            if (id != null && origin.length == 3 && tag.hasUUID("Building")) {
-                building = new BuildingInstance(tag.getUUID("Building"), id,
-                        new BlockPos(origin[0], origin[1], origin[2]), Rotation.valueOf(tag.getString("Rotation")));
-                airPolicy = ConstructionPlanner.AirPolicy.valueOf(tag.getString("AirPolicy"));
-            }
+            building = BuildingInstance.load(tag);
+            airPolicy = ConstructionPlanner.AirPolicy.valueOf(tag.getString("AirPolicy"));
         } catch (IllegalArgumentException e) { building = null; }
-        executor = new ConstructionExecutor(false, building == null ? Integer.MIN_VALUE : building.origin().getY());
+        executor = new ConstructionExecutor(false);
+        executor.load(tag.getCompound("Execution"));
     }
 }

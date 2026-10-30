@@ -1,6 +1,7 @@
 package io.github.dabaihenhaochi.wayside.entity.action;
 
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcMovementSafety;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -72,16 +73,9 @@ public final class MoveToAction implements NpcAction {
         }
 
         if (now >= nextRetryTime && npc.getNavigation().isDone()) {
-            if (entityTarget != null) {
-                npc.getNavigation().moveTo(entityTarget, speed);
-            } else {
-                npc.getNavigation().moveTo(
-                        positionTarget.getX() + 0.5,
-                        positionTarget.getY(),
-                        positionTarget.getZ() + 0.5,
-                        0, speed
-                );
-            }
+            var path = npc.getNavigation().createPath(targetPosition(), 0);
+            if (!NpcMovementSafety.isSafePath(path)) return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
+            npc.getNavigation().moveTo(path, speed);
             nextRetryTime = now + RETRY_TICKS;
         }
 
@@ -91,7 +85,7 @@ public final class MoveToAction implements NpcAction {
             Vec3 feet = Vec3.atBottomCenterOf(positionTarget);
             if (npc.position().distanceToSqr(feet) < 2.25
                     && Math.abs(npc.getY() - feet.y) < 0.5
-                    && npc.level().noCollision(npc, npc.getDimensions(npc.getPose()).makeBoundingBox(feet))) {
+                    && NpcMovementSafety.canWalkDirectly(npc, feet)) {
                 npc.getMoveControl().setWantedPosition(feet.x, feet.y, feet.z, speed);
             }
         }

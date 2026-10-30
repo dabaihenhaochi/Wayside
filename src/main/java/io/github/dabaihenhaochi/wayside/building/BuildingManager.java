@@ -57,6 +57,11 @@ public class BuildingManager {
         return data.getEntries().stream().noneMatch(existing -> existing.bounds().intersects(bounds));
     }
 
+    /** 高频的垫高许可检查直接查询坐标，不复制全部建筑记录或创建临时包围盒。 */
+    public boolean isPositionAvailable(BlockPos pos) {
+        return !data.isPositionReserved(pos);
+    }
+
     public boolean remove(UUID id) {
         return data.remove(id);
     }

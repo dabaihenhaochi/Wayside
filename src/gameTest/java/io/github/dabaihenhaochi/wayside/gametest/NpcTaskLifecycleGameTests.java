@@ -1,6 +1,8 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
@@ -17,6 +19,33 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Wayside.MODID)
 @PrefixGameTestTemplate(false)
 public class NpcTaskLifecycleGameTests {
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void arbitraryTemporaryTaskCompletesAndResumesFormalTask(GameTestHelper helper) {
+        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
+        npc.getTaskRunner().cancel();
+        CountingTask formal = new CountingTask(false);
+        NpcTaskRunner runner = new NpcTaskRunner(npc, () -> formal);
+        runner.tick();
+        int[] temporaryTicks = {0};
+        runner.temporarilyRun(new NpcTask() {
+            @Override public String typeId() { return "wayside:test_temporary"; }
+            @Override public String stageName() { return "TEST"; }
+            @Override public void pause(NpcEntity actor) {}
+            @Override public ActionResult tick(NpcEntity actor) {
+                temporaryTicks[0]++;
+                return ActionResult.success();
+            }
+        });
+        runner.tick();
+        helper.assertTrue(formal.ticks == 1 && temporaryTicks[0] == 1,
+                "A temporary task must run without advancing the paused formal task");
+        runner.tick();
+        helper.assertTrue(formal.ticks == 2 && temporaryTicks[0] == 1
+                        && runner.state() == NpcTaskRunner.State.RUNNING,
+                "Completing any temporary task must resume the same formal task");
+        helper.succeed();
+    }
+
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void configuredDefaultIsUsedForNewAndUnknownTasks(GameTestHelper helper) {
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
@@ -42,7 +71,7 @@ public class NpcTaskLifecycleGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
-    public static void legacyTaskStageStillRestoresThroughRegistry(GameTestHelper helper) {
+    public static void removedLegacyFieldUsesConfiguredDefault(GameTestHelper helper) {
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
         npc.getTaskRunner().cancel();
         NpcTaskRunner runner = new NpcTaskRunner(npc,
@@ -50,26 +79,32 @@ public class NpcTaskLifecycleGameTests {
         CompoundTag tag = new CompoundTag();
         tag.putString("WaysideTaskStage", "COMPLETED");
         runner.load(tag);
-        helper.assertTrue(runner.state() == NpcTaskRunner.State.COMPLETED
-                        && runner.description().startsWith("wayside:gather_and_craft_planks") && !runner.hasWork(),
-                "Legacy stage must restore its original task and completed lifecycle");
+        helper.assertTrue(runner.state() == NpcTaskRunner.State.RUNNING
+                        && runner.description().startsWith("wayside:visit_position"),
+                "Removed legacy data must not replace the configured default");
         helper.succeed();
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
-    public static void legacyCraftingStageResumesWithoutGatheringAgain(GameTestHelper helper) {
+    public static void savedCraftingStepResumesWithoutGatheringAgain(GameTestHelper helper) {
         for (int x = 0; x < 5; x++) for (int z = 0; z < 5; z++) helper.setBlock(x, 0, z, net.minecraft.world.level.block.Blocks.STONE);
         NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
         npc.getInventory().clearContent();
         npc.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.OAK_LOG, 1));
-        CompoundTag legacy = new CompoundTag();
-        legacy.putString("WaysideTaskStage", "CRAFTING");
-        npc.getTaskRunner().load(legacy);
+        CompoundTag task = new CompoundTag();
+        task.putString("Type", "wayside:gather_and_craft_planks");
+        task.putString("State", "RUNNING");
+        CompoundTag data = new CompoundTag();
+        data.putInt("Current", 1);
+        task.put("Data", data);
+        CompoundTag saved = new CompoundTag();
+        saved.put("WaysideTask", task);
+        npc.getTaskRunner().load(saved);
         helper.succeedWhen(() -> {
             helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED,
-                    "The old crafting stage must finish without trying to gather sixteen logs again");
-            helper.assertTrue(npc.getLogCount() == 0 && npc.getPlankCount() == 4,
-                    "The restored crafting stage must consume the existing log exactly once");
+                    "The saved crafting step must finish without gathering sixteen logs again");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 4,
+                    "The resumed crafting step must consume the existing log exactly once");
         });
     }
 

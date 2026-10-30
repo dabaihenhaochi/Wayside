@@ -92,9 +92,7 @@ public final class CraftRecipeAction implements NpcAction {
             return ActionResult.failed(ActionResult.Failure.NO_SPACE);
         }
         // 确认原料和产物均有效且能装入背包后，一次性提交本次合成。
-        for (int i = 0; i < original.getContainerSize(); i++) {
-            original.setItem(i, simulated.getItem(i).copy());
-        }
+        InventoryOps.replaceContents(original, simulated);
 
         completedCrafts++;
         return completedCrafts >= step.crafts()

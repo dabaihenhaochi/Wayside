@@ -64,14 +64,10 @@ public final class CraftSingleIngredientAction implements NpcAction {
             }
 
             // 先模拟扣料和装入产物，避免背包满时损失原料。
-            SimpleContainer simulated = InventoryOps.copy(inventory);
-            simulated.removeItem(i, 1);
-            if (!simulated.addItem(product.copy()).isEmpty()) {
+            if (!InventoryOps.exchange(inventory, i, 1, product)) {
                 return ActionResult.failed(ActionResult.Failure.NO_SPACE);
             }
 
-            inventory.removeItem(i, 1);
-            inventory.addItem(product.copy());
             return ActionResult.running();
         }
 

@@ -1,52 +1,37 @@
 package io.github.dabaihenhaochi.wayside.entity.task.resource;
 
-import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
-
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
-import io.github.dabaihenhaochi.wayside.entity.action.CraftRecipeAction;
-import io.github.dabaihenhaochi.wayside.entity.action.MoveToAction;
-import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
-import io.github.dabaihenhaochi.wayside.material.MaterialPlan;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
+import io.github.dabaihenhaochi.wayside.entity.task.CompositeTask;
+import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
+import io.github.dabaihenhaochi.wayside.entity.task.TaskSequence;
 import io.github.dabaihenhaochi.wayside.material.MaterialPlanner;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-// 根据背包规划采集和合成，目前仅能采集橡木；中断后按实际库存重新规划。
-public final class SupplyMaterialsTask implements NpcTask {
+/** 判断最终材料缺口，再组合采集和配方任务。计划重建时始终以真实库存为准。 */
+public final class SupplyMaterialsTask extends CompositeTask {
     public static final String ID = "wayside:supply_materials";
     private final Map<Item, Integer> requested = new LinkedHashMap<>();
+    private TaskSequence production;
 
-    private MaterialPlan plan;
-    private int craftStepIndex;
-    private CraftRecipeAction craftAction;
-    private GatherResourceTask gathering;
-    private int gatherTarget;
-    private MoveToAction workstationMove;
-
-    // 供存档工厂创建，随后加载保存的需求。
-    public SupplyMaterialsTask() {
-        this(Map.of(Items.OAK_STAIRS, 8));
-    }
-
-    public SupplyMaterialsTask(Map<Item, Integer> requested) {
-        setRequested(requested);
-    }
+    public SupplyMaterialsTask() { this(Map.of(Items.OAK_STAIRS, 8)); }
+    public SupplyMaterialsTask(Map<Item, Integer> requested) { setRequested(requested); }
 
     // 先校验全部需求，再替换为独立副本。
     private void setRequested(Map<Item, Integer> items) {
@@ -66,143 +51,41 @@ public final class SupplyMaterialsTask implements NpcTask {
     }
 
     @Override public String typeId() { return ID; }
+    @Override protected NpcTask activeTask() { return production; }
+    @Override public String stageName() { return production == null ? "PLANNING_MATERIALS" : production.stageName(); }
 
-    @Override public String stageName() {
-        if (workstationMove != null) return "MOVING_TO_WORKSTATION";
-        if (gathering != null) return "GATHERING";
-        if (craftAction != null) return "CRAFTING";
-        return "PLANNING";
-    }
-
-    // 依次完成规划、补齐原木、执行配方，最后核验实际库存达标。
-    @Override
-    public ActionResult tick(NpcEntity npc) {
-        if (!(npc.level() instanceof ServerLevel level)) {
-            return ActionResult.failed(ActionResult.Failure.UNKNOWN);
-        }
-
-        if (plan == null) {
-            plan = MaterialPlanner.plan(
-                    level, requested, npc.getInventory(), Set.of(Items.OAK_LOG));
-            craftStepIndex = 0;
-            craftAction = null;
-            // 在规划时固定原木总量目标，避免每次拾取后目标随之增加。
-            int newTarget = count(npc.getInventory(), Items.OAK_LOG)
-                    + plan.requiredSupplies().getOrDefault(Items.OAK_LOG, 0);
-            if (gathering != null && gatherTarget != newTarget) {
-                gathering.pause(npc);
-                gathering = null;
-            }
-            gatherTarget = newTarget;
-            if (!plan.isFeasible()) {
+    @Override public ActionResult tick(NpcEntity npc) {
+        if (!(npc.level() instanceof ServerLevel level)) return ActionResult.failed(ActionResult.Failure.INVALID_TARGET);
+        if (isSatisfied(npc)) return ActionResult.success();
+        if (production == null) {
+            var plan = MaterialPlanner.plan(level, requested, npc.getInventory(), Set.of(Items.OAK_LOG));
+            if (!plan.isFeasible() || plan.requiredSupplies().keySet().stream().anyMatch(item -> item != Items.OAK_LOG)) {
                 return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
             }
+            var tasks = new ArrayList<NpcTask>();
+            int logs = plan.requiredSupplies().getOrDefault(Items.OAK_LOG, 0);
+            if (logs > 0) {
+                if (!npc.getInventory().canAddItem(new ItemStack(Items.OAK_LOG))) return ActionResult.failed(ActionResult.Failure.NO_SPACE);
+                int target = InventoryOps.count(npc.getInventory(), Items.OAK_LOG) + logs;
+                tasks.add(new GatherResourceTask(state -> state.is(Blocks.OAK_LOG), stack -> stack.is(Items.OAK_LOG), target));
+            }
+            for (var step : plan.craftSteps()) tasks.add(new CraftRecipeTask(step));
+            if (tasks.isEmpty()) return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
+            production = new TaskSequence("wayside:material_production", tasks);
         }
-
-        int additionalLogs = plan.requiredSupplies().getOrDefault(Items.OAK_LOG, 0);
-        // 当前只提供橡木采集，其他外部材料需求直接报告失败。
-        if (plan.requiredSupplies().size() > (additionalLogs > 0 ? 1 : 0)) {
-            return ActionResult.failed(ActionResult.Failure.MISSING_INGREDIENT);
-        }
-
-        if (additionalLogs > 0) {
-            if (gathering == null) {
-                gathering = new GatherResourceTask(
-                        state -> state.is(Blocks.OAK_LOG),
-                        stack -> stack.is(Items.OAK_LOG),
-                        actor -> count(actor.getInventory(), Items.OAK_LOG),
-                        gatherTarget);
-            }
-            // 本次计划沿用固定采集目标，直到重新规划。
-            ActionResult gathered = gathering.tick(npc);
-            if (gathered.isFailed()) return gathered;
-            if (!gathered.isSuccess()) return ActionResult.running();
-
-            gathering.pause(npc);
-            gathering = null;
-            gatherTarget = 0;
-            // 补给到位后清空待补项，避免下一 tick 再次创建采集任务。
-            plan = new MaterialPlan(plan.craftSteps(), Map.of(), plan.unavailable());
-        } else if (gathering != null) {
-            gathering.pause(npc);
-            gathering = null;
-            gatherTarget = 0;
-        }
-
-        if (craftStepIndex < plan.craftSteps().size()) {
-            var step = plan.craftSteps().get(craftStepIndex);
-            if ((step.width() > 2 || step.height() > 2) && !CraftRecipeAction.hasWorkstation(npc)) {
-                if (workstationMove == null) {
-                    BlockPos table = BlockPos.findClosestMatch(npc.blockPosition(), 8, 3,
-                            pos -> level.hasChunkAt(pos) && level.getBlockState(pos).is(Blocks.CRAFTING_TABLE)).orElse(null);
-                    if (table == null) return ActionResult.failed(ActionResult.Failure.MISSING_WORKSTATION);
-                    var stand = NpcBlockInteraction.findWorkPosition(npc, table);
-                    if (stand.isEmpty()) return ActionResult.failed(ActionResult.Failure.UNREACHABLE);
-                    workstationMove = new MoveToAction(stand.get(), 1.0, CraftRecipeAction::hasWorkstation);
-                }
-                ActionResult moved = workstationMove.tick(npc);
-                if (!moved.isSuccess()) return moved;
-            }
-            if (workstationMove != null) {
-                workstationMove.stop(npc);
-                workstationMove = null;
-            }
-            if (craftAction == null) {
-                craftAction = new CraftRecipeAction(plan.craftSteps().get(craftStepIndex));
-            }
-            ActionResult result = craftAction.tick(npc);
-            if (result.isFailed()) return result;
-            if (result.isSuccess()) {
-                craftAction.stop(npc);
-                craftAction = null;
-                craftStepIndex++;
-            }
-            return ActionResult.running();
-        }
-
-        // 计划基于旧库存快照，结束前再次核验真实数量。
-        for (var entry : requested.entrySet()) {
-            if (count(npc.getInventory(), entry.getKey()) < entry.getValue()) {
-                return ActionResult.failed(ActionResult.Failure.WORLD_CHANGED);
-            }
-        }
-        return ActionResult.success();
+        ActionResult result = production.tick(npc);
+        return result.isSuccess() && !isSatisfied(npc) ? ActionResult.failed(ActionResult.Failure.WORLD_CHANGED) : result;
     }
 
-    private static int count(SimpleContainer inventory, Item item) {
-        int total = 0;
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) total += stack.getCount();
-        }
-        return total;
+    private boolean isSatisfied(NpcEntity npc) {
+        return requested.entrySet().stream().allMatch(entry ->
+                InventoryOps.count(npc.getInventory(), entry.getKey()) >= entry.getValue());
     }
 
-    @Override
-    public void pause(NpcEntity npc) {
-        if (workstationMove != null) {
-            workstationMove.stop(npc);
-            workstationMove = null;
-        }
-        if (gathering != null) {
-            gathering.pause(npc);
-        }
-        if (craftAction != null) {
-            craftAction.stop(npc);
-            craftAction = null;
-        }
-        // 已完成合成已写入背包，继续时重新规划，避免重复执行。
-        plan = null;
-        craftStepIndex = 0;
-    }
-
-    @Override public BlockPos activeBlockTarget() {
-        return gathering == null ? null : gathering.activeBlockTarget();
-    }
-
-    @Override public BlockPos activeMoveTarget() {
-        if (workstationMove != null) return workstationMove.targetPosition();
-        return gathering == null ? null : gathering.activeMoveTarget();
+    @Override public void pause(NpcEntity npc) {
+        super.pause(npc);
+        // 已完成的操作已经反映在库存中。恢复时重新规划，避免重复执行部分完成的配方。
+        production = null;
     }
 
     // 只保存最终物品需求，临时采集和合成计划不写入存档。
@@ -237,11 +120,6 @@ public final class SupplyMaterialsTask implements NpcTask {
             }
             if (!loaded.isEmpty()) setRequested(loaded);
         }
-        plan = null;
-        gathering = null;
-        gatherTarget = 0;
-        craftAction = null;
-        workstationMove = null;
-        craftStepIndex = 0;
+        production = null;
     }
 }

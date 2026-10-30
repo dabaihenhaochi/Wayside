@@ -1,6 +1,7 @@
 package io.github.dabaihenhaochi.wayside.building;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
@@ -46,5 +47,24 @@ public record BuildingInstance(
                 .setRotationPivot(BlockPos.ZERO);
 
         return blueprint.getTemplate().getBoundingBox(settings, origin);
+    }
+
+    public CompoundTag save() {
+        CompoundTag tag = new CompoundTag();
+        tag.putUUID("Building", id);
+        tag.putString("Blueprint", blueprintId.toString());
+        tag.putIntArray("Origin", new int[]{origin.getX(), origin.getY(), origin.getZ()});
+        tag.putString("Rotation", rotation.name());
+        return tag;
+    }
+
+    public static BuildingInstance load(CompoundTag tag) {
+        ResourceLocation blueprint = ResourceLocation.tryParse(tag.getString("Blueprint"));
+        int[] origin = tag.getIntArray("Origin");
+        if (blueprint == null || origin.length != 3 || !tag.hasUUID("Building")) {
+            throw new IllegalArgumentException("Invalid building instance");
+        }
+        return new BuildingInstance(tag.getUUID("Building"), blueprint,
+                new BlockPos(origin[0], origin[1], origin[2]), Rotation.valueOf(tag.getString("Rotation")));
     }
 }

@@ -1,14 +1,13 @@
 package io.github.dabaihenhaochi.wayside.entity.task;
 
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
+import io.github.dabaihenhaochi.wayside.entity.task.build.BuildBuildingTask;
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildStructureTask;
 import io.github.dabaihenhaochi.wayside.entity.task.build.PrepareBuildingSiteTask;
 import io.github.dabaihenhaochi.wayside.entity.task.resource.EnsurePlanksTask;
 import io.github.dabaihenhaochi.wayside.entity.task.resource.GatherAndCraftPlanksTask;
 import io.github.dabaihenhaochi.wayside.entity.task.resource.SupplyMaterialsTask;
 
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,6 +25,7 @@ public final class NpcTaskTypes {
         register(SupplyMaterialsTask.ID, SupplyMaterialsTask::new);
         register(BuildStructureTask.ID, BuildStructureTask::new);
         register(BuildHutTask.ID, BuildHutTask::new);
+        register(BuildBuildingTask.ID, BuildBuildingTask::new);
         register(PrepareBuildingSiteTask.ID, PrepareBuildingSiteTask::new);
     }
 
@@ -42,16 +42,5 @@ public final class NpcTaskTypes {
     public static Optional<NpcTask> create(String id) {
         Supplier<? extends NpcTask> factory = TYPES.get(id);
         return factory == null ? Optional.empty() : Optional.of(factory.get());
-    }
-
-    // 兼容 v0.0.6 的阶段存档；具体任务类型知识集中在此处。
-    public static Optional<NpcTask> restoreLegacy(CompoundTag entityTag) {
-        if (!entityTag.contains("WaysideTaskStage", Tag.TAG_STRING)) return Optional.empty();
-        return create(GatherAndCraftPlanksTask.ID).map(task -> {
-            CompoundTag data = new CompoundTag();
-            data.putString("Stage", entityTag.getString("WaysideTaskStage"));
-            task.load(data);
-            return task;
-        });
     }
 }

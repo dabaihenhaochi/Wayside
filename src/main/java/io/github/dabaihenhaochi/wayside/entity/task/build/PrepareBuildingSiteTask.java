@@ -26,13 +26,18 @@ public final class PrepareBuildingSiteTask implements NpcTask {
     @Override public void pause(NpcEntity npc) { executor.pause(npc); }
     @Override public ActionResult tick(NpcEntity npc) {
         if (!(npc.level() instanceof ServerLevel level) || site == null) return ActionResult.failed(ActionResult.Failure.INVALID_TARGET);
-        return executor.tick(npc, () -> site.remaining(level));
+        return executor.tick(npc, () -> site.remaining(level), pos -> !site.reservedBounds().isInside(pos));
     }
-    @Override public CompoundTag save() { return site == null ? new CompoundTag() : site.save(); }
+    @Override public CompoundTag save() {
+        CompoundTag tag = site == null ? new CompoundTag() : site.save();
+        tag.put("Execution", executor.save());
+        return tag;
+    }
     @Override public void load(CompoundTag tag) {
         site = null;
         try { site = BuildingSitePlan.load(tag); }
         catch (IllegalArgumentException ignored) { /* tick 明确报告无效存档。 */ }
         executor = new ConstructionExecutor(true);
+        executor.load(tag.getCompound("Execution"));
     }
 }

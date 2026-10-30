@@ -9,12 +9,11 @@ import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.SimpleContainer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.ContainerHelper;
 import io.github.dabaihenhaochi.wayside.entity.inventory.NpcInitialSupplies;
+import io.github.dabaihenhaochi.wayside.entity.ai.NpcMovementSafety;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskExecutionGoal;
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
@@ -54,20 +53,7 @@ public class NpcEntity extends PathfinderMob {
         return this.inventory;
     }
 
-    //检索背包原木数量
-    public int getLogCount() {
-        int count = 0;
-
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-
-            if (stack.is(ItemTags.LOGS)) {
-                count += stack.getCount();
-            }
-        }
-
-        return count;
-    }
+    @Override public int getMaxFallDistance() { return NpcMovementSafety.MAX_DROP; }
 
     // 保存任务状态和背包内容。
     @Override
@@ -105,18 +91,4 @@ public class NpcEntity extends PathfinderMob {
         taskRunner.load(tag);
     }
 
-    //检索背包木板数量
-    public int getPlankCount() {
-        int count = 0;
-
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-
-            if (stack.is(ItemTags.PLANKS)) {
-                count += stack.getCount();
-            }
-        }
-
-        return count;
-    }
 }

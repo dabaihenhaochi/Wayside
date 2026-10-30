@@ -53,7 +53,13 @@ public final class NpcBlockInteraction {
         if (!level.hasChunkAt(target) || !hasStandingSpace(npc, target, feet)) {
             return false;
         }
+        return canReachBlockFrom(npc, target, feet);
+    }
 
+    // 只检查操作几何，用于规划假定站位；实际动作还必须检查落脚或垫高条件。
+    public static boolean canReachBlockFrom(NpcEntity npc, BlockPos target, Vec3 feet) {
+        Level level = npc.level();
+        if (!level.hasChunkAt(target)) return false;
         Vec3 eye = eyePositionAt(npc, feet);
         if (!level.hasChunksAt(BlockPos.containing(eye), target)) return false;
         // 破坏按实际外形检查，台阶、玻璃板等也能选到有效操作表面。
@@ -76,6 +82,12 @@ public final class NpcBlockInteraction {
         Level level = npc.level();
         if (!level.hasChunkAt(target) || !level.getBlockState(target).isAir()
                 || !hasStandingSpace(npc, target, feet)) return false;
+        return canReachPlacementFrom(npc, target, state, feet);
+    }
+
+    public static boolean canReachPlacementFrom(NpcEntity npc, BlockPos target, BlockState state, Vec3 feet) {
+        Level level = npc.level();
+        if (!level.hasChunkAt(target) || !level.getBlockState(target).isAir()) return false;
         AABB body = npc.getDimensions(npc.getPose()).makeBoundingBox(feet);
         for (AABB box : state.getCollisionShape(level, target, CollisionContext.of(npc)).toAabbs()) {
             if (box.move(target).intersects(body)) return false;
@@ -88,17 +100,40 @@ public final class NpcBlockInteraction {
                 ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS;
     }
 
+    // 跳起后脚下放置的专用条件，不能作为普通悬空放置的入口。
+    public static boolean canPlaceUnderfoot(NpcEntity npc, BlockPos target, BlockState state) {
+        BlockPos below = target.below();
+        double dx = npc.getX() - (target.getX() + 0.5);
+        double dz = npc.getZ() - (target.getZ() + 0.5);
+        double rise = npc.getY() - target.getY();
+        return !npc.onGround() && rise >= 1.01 && rise <= 1.5 && dx * dx + dz * dz < 0.04
+                && npc.level().hasChunkAt(below) && npc.level().getFluidState(below).isEmpty()
+                && npc.level().getBlockState(below).isFaceSturdy(npc.level(), below, Direction.UP)
+                && canReachPlacementFrom(npc, target, state, npc.position());
+    }
+
     public static Optional<BlockPos> findPlacementPosition(
             NpcEntity npc, BlockPos target, BlockState state) {
+        return searchPlacementPosition(npc, target, state).stand();
+    }
+
+    /** 区分“没有满足操作几何的站位”和“有站位但实际寻路失败”。 */
+    public record PositionSearch(Optional<BlockPos> stand, boolean navigationFailed) {}
+
+    public static PositionSearch searchPlacementPosition(NpcEntity npc, BlockPos target, BlockState state) {
         return findPosition(npc, target, feet -> canPlaceAt(npc, target, state, feet));
     }
 
     // 筛选附近站位，优先操作余量和距离，并限制寻路尝试次数。
     public static Optional<BlockPos> findWorkPosition(NpcEntity npc, BlockPos target) {
+        return searchWorkPosition(npc, target).stand();
+    }
+
+    public static PositionSearch searchWorkPosition(NpcEntity npc, BlockPos target) {
         return findPosition(npc, target, feet -> canWorkAt(npc, target, feet));
     }
 
-    private static Optional<BlockPos> findPosition(NpcEntity npc, BlockPos target, Predicate<Vec3> usable) {
+    private static PositionSearch findPosition(NpcEntity npc, BlockPos target, Predicate<Vec3> usable) {
         List<BlockPos> candidates = new ArrayList<>();
         // 候选是 NPC 脚底的格子，不是待采集的方块。
         for (BlockPos candidate : BlockPos.betweenClosed(
@@ -121,11 +156,11 @@ public final class NpcBlockInteraction {
                 break;
             }
             Path path = npc.getNavigation().createPath(candidate, 0);
-            if (path != null && path.canReach()) {
-                return Optional.of(candidate);
+            if (NpcMovementSafety.isSafePath(path)) {
+                return new PositionSearch(Optional.of(candidate), false);
             }
         }
-        return Optional.empty();
+        return new PositionSearch(Optional.empty(), attempts > 0);
     }
 
     private static boolean hasStandingSpace(NpcEntity npc, BlockPos target, Vec3 feet) {

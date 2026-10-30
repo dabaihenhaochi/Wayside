@@ -1,6 +1,8 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner;
@@ -34,7 +36,7 @@ public final class SupplyMaterialsGameTests {
         helper.runAtTickTime(30, () -> {
             helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED,
                     "Existing stairs must complete the request");
-            helper.assertTrue(count(npc, Items.OAK_STAIRS) == 8 && npc.getLogCount() == 3,
+            helper.assertTrue(count(npc, Items.OAK_STAIRS) == 8 && InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 3,
                     "A fulfilled requirement must not consume supplies");
             helper.succeed();
         });
@@ -53,7 +55,7 @@ public final class SupplyMaterialsGameTests {
             helper.assertTrue(npc.getTaskRunner().state() == NpcTaskRunner.State.COMPLETED,
                     "The material task must finish its craft steps");
             helper.assertTrue(count(npc, Items.OAK_STAIRS) == 8
-                            && npc.getLogCount() == 0 && npc.getPlankCount() == 0,
+                            && InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0,
                     "Three stored logs should become exactly eight stairs");
         });
     }
@@ -95,7 +97,7 @@ public final class SupplyMaterialsGameTests {
                 "A three-by-three recipe without a crafting table must fail");
         helper.assertTrue(runner.lastResult().failure() == ActionResult.Failure.MISSING_WORKSTATION,
                 "A missing crafting table should be reported");
-        helper.assertTrue(npc.getPlankCount() == 6, "Failed crafting cannot consume planks");
+        helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 6, "Failed crafting cannot consume planks");
 
         helper.setBlock(3, 1, 5, Blocks.CRAFTING_TABLE);
         runner.retry();
@@ -143,7 +145,7 @@ public final class SupplyMaterialsGameTests {
             helper.assertTrue(runner.state() == NpcTaskRunner.State.COMPLETED,
                     "Restored task must finish from the actual inventory");
             helper.assertTrue(count(npc, Items.OAK_STAIRS) == 8
-                            && npc.getLogCount() == 0 && npc.getPlankCount() == 0,
+                            && InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0,
                     "Reload must neither lose nor duplicate ingredients");
         });
     }

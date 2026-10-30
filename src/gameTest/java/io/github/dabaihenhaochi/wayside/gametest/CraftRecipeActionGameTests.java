@@ -1,6 +1,8 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.action.ActionResult;
 import io.github.dabaihenhaochi.wayside.entity.action.CraftRecipeAction;
@@ -59,8 +61,8 @@ public final class CraftRecipeActionGameTests {
             helper.assertTrue(current[0] == plan.craftSteps().size(), "Plan not yet finished");
             helper.assertTrue(count(npc.getInventory(), Items.OAK_STAIRS) == 8,
                     "Two stair crafts should create exactly eight stairs");
-            helper.assertTrue(npc.getLogCount() == 0, "Exactly three logs must be consumed");
-            helper.assertTrue(npc.getPlankCount() == 0, "All twelve planks should be consumed");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0, "Exactly three logs must be consumed");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0, "All twelve planks should be consumed");
         });
     }
 
@@ -78,7 +80,7 @@ public final class CraftRecipeActionGameTests {
         ActionResult result = new CraftRecipeAction(plan.craftSteps().get(0)).tick(npc);
         helper.assertTrue(result.failure() == ActionResult.Failure.MISSING_WORKSTATION,
                 "3x3 recipes must require a nearby crafting table");
-        helper.assertTrue(npc.getPlankCount() == 6, "No planks may be consumed");
+        helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 6, "No planks may be consumed");
         helper.succeed();
     }
 
@@ -97,7 +99,7 @@ public final class CraftRecipeActionGameTests {
             ActionResult result = action.tick(npc);
             helper.assertTrue(result.failure() == ActionResult.Failure.MISSING_INGREDIENT,
                     "Missing logs must be reported before crafting");
-            helper.assertTrue(npc.getLogCount() == 0 && npc.getPlankCount() == 0,
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0,
                     "Failed crafting may not change the inventory");
             helper.succeed();
         });
@@ -123,8 +125,8 @@ public final class CraftRecipeActionGameTests {
             ActionResult result = action.tick(npc);
             helper.assertTrue(result.failure() == ActionResult.Failure.NO_SPACE,
                     "No inventory slot can accept the output");
-            helper.assertTrue(npc.getLogCount() == 2, "The input logs must be preserved");
-            helper.assertTrue(npc.getPlankCount() == 0, "No output may be inserted");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.LOGS) == 2, "The input logs must be preserved");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 0, "No output may be inserted");
             helper.succeed();
         });
     }

@@ -1,6 +1,8 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.ai.NpcBlockInteraction;
 import io.github.dabaihenhaochi.wayside.entity.task.NpcTask;
@@ -121,7 +123,8 @@ public class NpcHarvestGameTests {
         helper.runAtTickTime(20, () -> {
             helper.assertTrue((npc.getTaskRunner().activeBlockTarget() != null) && !(npc.getTaskRunner().activeMoveTarget() != null), "NPC must be working before the manual command");
 
-            npc.getTaskRunner().temporarilyMoveTo(helper.absolutePos(new BlockPos(1, 1, 1)));
+            npc.getTaskRunner().temporarilyRun(new io.github.dabaihenhaochi.wayside.entity.task.VisitPositionTask(
+                    helper.absolutePos(new BlockPos(1, 1, 1))));
         });
         helper.runAtTickTime(45, () -> {
             helper.assertBlockPresent(Blocks.OAK_LOG, LOG);
@@ -309,6 +312,53 @@ public class NpcHarvestGameTests {
         });
     }
 
+    @GameTest(template = "empty", timeoutTicks = 120)
+    public static void gathersNonWoodUsingTheSameFilterForPickupAndInventory(GameTestHelper helper) {
+        prepareFloor(helper);
+        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
+        npc.getInventory().clearContent();
+        npc.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(Items.OAK_LOG, 64));
+        npc.getInventory().setItem(1, new net.minecraft.world.item.ItemStack(Items.DIRT, 1));
+        npc.getTaskRunner().setTask(new GatherResourceTask(state -> false, stack -> stack.is(Items.DIRT), 2));
+        Vec3 itemPosition = Vec3.atCenterOf(helper.absolutePos(new BlockPos(2, 1, 2)));
+        var item = new net.minecraft.world.entity.item.ItemEntity(helper.getLevel(),
+                itemPosition.x, itemPosition.y, itemPosition.z,
+                new net.minecraft.world.item.ItemStack(Items.DIRT, 1));
+        item.setDeltaMovement(Vec3.ZERO);
+        item.setNoPickUpDelay();
+        helper.getLevel().addFreshEntity(item);
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(npc.getTaskRunner().state()
+                            == io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner.State.COMPLETED,
+                    "Non-wood gathering must complete after collecting its own target item");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), Items.DIRT) == 2
+                            && InventoryOps.count(npc.getInventory(), Items.OAK_LOG) == 64,
+                    "Existing unrelated inventory cannot satisfy the dirt goal");
+        });
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void ensuresMixedWoodPlanksWithoutExhaustingSpareLogs(GameTestHelper helper) {
+        prepareFloor(helper);
+        NpcEntity npc = helper.spawn(ModEntities.NPC.get(), new BlockPos(2, 1, 2));
+        npc.getInventory().clearContent();
+        npc.getInventory().setItem(0, new net.minecraft.world.item.ItemStack(Items.OAK_LOG, 1));
+        npc.getInventory().setItem(1, new net.minecraft.world.item.ItemStack(Items.BIRCH_LOG, 3));
+        npc.getInventory().setItem(2, new net.minecraft.world.item.ItemStack(Items.OAK_PLANKS, 3));
+        npc.getInventory().setItem(3, new net.minecraft.world.item.ItemStack(Items.BIRCH_PLANKS, 2));
+        npc.getTaskRunner().setTask(new io.github.dabaihenhaochi.wayside.entity.task.resource.EnsurePlanksTask(9));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(npc.getTaskRunner().state()
+                            == io.github.dabaihenhaochi.wayside.entity.task.NpcTaskRunner.State.COMPLETED,
+                    "The tag-based plank goal must finish using stored logs");
+            helper.assertTrue(InventoryOps.count(npc.getInventory(), ItemTags.PLANKS) == 9
+                            && InventoryOps.count(npc.getInventory(), Items.BIRCH_LOG) == 3,
+                    "Existing plank variants must count toward the goal and spare logs must remain");
+        });
+    }
+
     private static void prepareFloor(GameTestHelper helper) {
         for (int x = 0; x < 12; x++) {
             for (int z = 0; z < 12; z++) {
@@ -323,7 +373,7 @@ public class NpcHarvestGameTests {
                 .stream().filter(entity -> entity.getItem().is(Items.OAK_LOG))
                 .mapToInt(entity -> entity.getItem().getCount()).sum();
         count += helper.getLevel().getEntitiesOfClass(NpcEntity.class, area).stream()
-                .mapToInt(NpcEntity::getLogCount).sum();
+                .mapToInt(actor -> InventoryOps.count(actor.getInventory(), ItemTags.LOGS)).sum();
         helper.assertTrue(count == expected, "Expected " + expected + " harvested logs, found " + count);
     }
     // 默认目标已改为自动建屋；采集回归测试显式选择采集任务。
@@ -344,6 +394,6 @@ public class NpcHarvestGameTests {
     }
     private static GatherResourceTask logGatherer() {
         return new GatherResourceTask(state -> state.is(net.minecraft.tags.BlockTags.LOGS),
-                stack -> stack.is(net.minecraft.tags.ItemTags.LOGS), NpcEntity::getLogCount, 16);
+                stack -> stack.is(ItemTags.LOGS), 16);
     }
 }

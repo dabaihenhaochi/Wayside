@@ -1,6 +1,8 @@
 package io.github.dabaihenhaochi.wayside.gametest;
 
 import io.github.dabaihenhaochi.wayside.Wayside;
+import net.minecraft.tags.ItemTags;
+import io.github.dabaihenhaochi.wayside.entity.inventory.InventoryOps;
 import io.github.dabaihenhaochi.wayside.entity.NpcEntity;
 import io.github.dabaihenhaochi.wayside.entity.task.build.BuildHutTask;
 import io.github.dabaihenhaochi.wayside.registry.ModEntities;
@@ -74,7 +76,7 @@ public final class NpcInitialSuppliesGameTests {
         restored.readAdditionalSaveData(saved);
         helper.assertTrue(restored.getInventory().countItem(Items.DIAMOND) == 3
                         && restored.getInventory().countItem(Items.DIRT) == 7
-                        && restored.getLogCount() == 0 && restored.getPlankCount() == 0
+                        && InventoryOps.count(restored.getInventory(), ItemTags.LOGS) == 0 && InventoryOps.count(restored.getInventory(), ItemTags.PLANKS) == 0
                         && restored.getInventory().countItem(Items.OAK_STAIRS) == 0,
                 "Repeated loading must exactly restore saved quantities and remove all constructor defaults");
         helper.succeed();
@@ -103,7 +105,7 @@ public final class NpcInitialSuppliesGameTests {
         NpcEntity second = ModEntities.NPC.get().create(helper.getLevel());
         first.getInventory().getItem(0).shrink(5);
         first.getInventory().removeItem(1, 10);
-        helper.assertTrue(first.getLogCount() == 11 && first.getPlankCount() == 54,
+        helper.assertTrue(InventoryOps.count(first.getInventory(), ItemTags.LOGS) == 11 && InventoryOps.count(first.getInventory(), ItemTags.PLANKS) == 54,
                 "Fixture should consume material from the first NPC");
         assertInitialStock(helper, second);
         helper.succeed();

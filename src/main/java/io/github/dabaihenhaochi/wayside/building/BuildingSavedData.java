@@ -45,6 +45,11 @@ public class BuildingSavedData extends SavedData {
         return List.copyOf(buildings.values());
     }
 
+    boolean isPositionReserved(BlockPos pos) {
+        for (Entry entry : buildings.values()) if (entry.bounds().isInside(pos)) return true;
+        return false;
+    }
+
     public int size() {
         return buildings.size();
     }
